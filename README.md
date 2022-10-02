@@ -7,7 +7,7 @@
 
   <p>
     <a href="https://github.com/bnjbvr/trinity/actions?query=workflow%3ARust"><img src="https://github.com/bnjbvr/trinity/workflows/Rust/badge.svg" alt="build status" /></a>
-    <a href="https://matrix.to/#/#botzilla:delire.party"><img src="https://img.shields.io/badge/matrix-join_chat-brightgreen.svg" alt="matrix chat" /></a>
+    <a href="https://matrix.to/#/#trinity:delire.party"><img src="https://img.shields.io/badge/matrix-join_chat-brightgreen.svg" alt="matrix chat" /></a>
     <img src="https://img.shields.io/badge/rustc-stable+-green.svg" alt="supported rustc stable" />
   </p>
 </div>
