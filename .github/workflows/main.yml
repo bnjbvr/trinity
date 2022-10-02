@@ -16,9 +16,6 @@ jobs:
         rust:
           - stable
           - nightly
-        directory:
-          - ./
-          - ./modules
 
     steps:
       - uses: actions/checkout@v2
@@ -31,16 +28,26 @@ jobs:
 
       - uses: Swatinem/rust-cache@v1
 
-      - name: Format
-        working-directory: ${{ matrix.directory }}
+      - name: Format host
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
 
-      - name: Test
-        working-directory: ${{ matrix.directory }}
+      - name: Format modules
         uses: actions-rs/cargo@v1
         with:
-          command: test
+          command: fmt
+          args: --all --manifest-path ./modules/Cargo.toml -- --check
+
+      - name: Check host
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
           args: --all --verbose
+
+      - name: Check modules
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --all --manifest-path ./modules/Cargo.toml --verbose
