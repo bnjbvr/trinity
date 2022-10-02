@@ -1,0 +1,26 @@
+enum request-verb {
+    get, put, delete, post
+}
+
+record request-header {
+    key: string,
+    value: string,
+}
+
+record request {
+    verb: request-verb,
+    url: string,
+    headers: list<request-header>,
+    body: option<string>
+}
+
+enum response-status {
+    success, error
+}
+
+record response {
+    status: response-status,
+    body: option<string>,
+}
+
+request: func(req: request) -> result<response>

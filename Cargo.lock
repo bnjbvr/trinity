@@ -1678,15 +1678,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dotenvy",
+ "futures",
  "matrix-sdk",
  "notify",
  "rand 0.8.5",
  "reqwest",
- "serde",
  "tokio",
  "tracing",
  "tracing-subscriber",
- "uuid 1.1.2",
  "wasmtime",
  "wit-bindgen-host-wasmtime-rust",
 ]

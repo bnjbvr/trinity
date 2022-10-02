@@ -4,13 +4,10 @@ use anyhow::Context;
 use matrix_sdk::{
     config::SyncSettings,
     event_handler::Ctx,
-    room::{Joined, Room},
-    ruma::{
-        events::room::{
-            member::StrippedRoomMemberEvent,
-            message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
-        },
-        UserId,
+    room::Room,
+    ruma::events::room::{
+        member::StrippedRoomMemberEvent,
+        message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
     },
     Client,
 };
@@ -48,16 +45,17 @@ fn get_config() -> anyhow::Result<BotConfig> {
 }
 
 struct AppCtx {
-    client: reqwest::Client,
     modules: WasmModules,
     modules_path: PathBuf,
     needs_recompile: bool,
 }
 
 impl AppCtx {
+    /// Create a new `AppCtx`.
+    ///
+    /// Must be called from a blocking context.
     pub fn new(modules_path: PathBuf) -> anyhow::Result<Self> {
         Ok(Self {
-            client: reqwest::Client::default(),
             modules: WasmModules::new(&modules_path)?,
             modules_path,
             needs_recompile: false,
@@ -73,10 +71,11 @@ impl AppCtx {
             *need = true;
         }
 
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::new(1, 0)).await;
-
-            let mut ptr = ptr.lock().await;
+        tokio::task::spawn_blocking(move || {
+            let mut ptr = futures::executor::block_on(async {
+                tokio::time::sleep(Duration::new(1, 0)).await;
+                ptr.lock().await
+            });
 
             if let Ok(modules) = WasmModules::new(&ptr.modules_path) {
                 ptr.modules = modules;
@@ -101,34 +100,6 @@ impl App {
     }
 }
 
-async fn get_pun(ctx: &AppCtx, msg: &str, _from: &UserId, room: &Joined) -> anyhow::Result<bool> {
-    if !msg.starts_with("!pun") {
-        return Ok(false);
-    }
-
-    const URL: &str = "https://icanhazdadjoke.com/";
-
-    let req = ctx
-        .client
-        .get(URL)
-        .header("Accept", "application/json")
-        .build()?;
-
-    #[derive(serde::Deserialize)]
-    struct Response {
-        joke: String,
-    }
-
-    let response: Response = ctx.client.execute(req).await?.json().await?;
-
-    let joke = response.joke;
-
-    let text = RoomMessageEventContent::text_plain(format!("{joke}"));
-    room.send(text, None).await?;
-
-    Ok(true)
-}
-
 async fn on_message(
     ev: SyncRoomMessageEvent,
     room: Room,
@@ -149,7 +120,7 @@ async fn on_message(
 
     if let Some(ref unredacted) = ev.as_original() {
         let content = if let MessageType::Text(text) = &unredacted.content.msgtype {
-            text.body.as_str()
+            text.body.to_string()
         } else {
             // Ignore other kinds of messages at the moment.
             return Ok(());
@@ -163,45 +134,50 @@ async fn on_message(
         );
 
         // TODO ohnoes, locking across other awaits is bad
-        // Might be better that each handler gets its own state and lock instead, to minimize
-        // contention.
-        let mut ctx = ctx.inner.lock().await;
+        // TODO Use a lock-free data-structure for the list of modules + put locks in the module
+        // internal implementation?
+        // TODO or create a new wasm instance per message \o/
+        let ctx = ctx.inner.clone();
+        let room_id = room.room_id().to_owned();
 
-        let (store, modules) = ctx.modules.iter();
-        for module in modules {
-            tracing::trace!("handling messages with {}...", module.name());
-            match module.handle(&mut *store, &content, ev.sender(), &room.room_id()) {
-                Ok(msgs) => {
-                    let stop = !msgs.is_empty();
-                    for msg in msgs {
-                        let text = RoomMessageEventContent::text_plain(msg.content);
-                        // TODO take msg.to into consideration, don't always answer the whole room
-                        room.send(text, None).await?;
-                    }
-                    // TODO support handling the same message with several handlers.
-                    if stop {
-                        tracing::trace!("{} successfully handled the message!", module.name());
-                        return Ok(());
-                    }
-                }
+        let messages = tokio::task::spawn_blocking(move || {
+            let mut ctx = futures::executor::block_on(ctx.lock());
 
-                Err(err) => {
-                    tracing::warn!("wasm module {} caused an error: {err}", module.name());
+            let mut outgoing_messages = Vec::new();
+
+            let (store, modules) = ctx.modules.iter();
+            for module in modules {
+                tracing::trace!("trying to handle message with {}...", module.name());
+
+                match module.handle(&mut *store, &content, ev.sender(), &room_id) {
+                    Ok(msgs) => {
+                        let stop = !msgs.is_empty();
+
+                        for msg in msgs {
+                            let text = RoomMessageEventContent::text_plain(msg.content);
+                            // TODO take msg.to into consideration, don't always answer the whole room
+                            outgoing_messages.push(text);
+                        }
+
+                        // TODO support handling the same message with several handlers.
+                        if stop {
+                            tracing::trace!("{} returned a response!", module.name());
+                            return outgoing_messages;
+                        }
+                    }
+
+                    Err(err) => {
+                        tracing::warn!("wasm module {} caused an error: {err}", module.name());
+                    }
                 }
             }
-        }
 
-        {
-            match get_pun(&ctx, &content, ev.sender(), &room).await {
-                Ok(res) => {
-                    if res {
-                        return Ok(());
-                    }
-                }
-                Err(err) => {
-                    tracing::warn!("get_pun caused an error: {err}");
-                }
-            }
+            outgoing_messages
+        })
+        .await?;
+
+        for msg in messages {
+            room.send(msg, None).await?;
         }
     }
 
@@ -283,7 +259,10 @@ async fn real_main() -> anyhow::Result<()> {
     client.sync_once(SyncSettings::default()).await.unwrap();
 
     tracing::debug!("setting up app...");
-    let app_ctx = AppCtx::new("./modules/target/wasm32-unknown-unknown/release/".into())?;
+    let app_ctx = tokio::task::spawn_blocking(|| {
+        AppCtx::new("./modules/target/wasm32-unknown-unknown/release/".into())
+    })
+    .await??;
     let app = App::new(app_ctx);
 
     let _watcher_guard = watcher(app.inner.clone()).await?;

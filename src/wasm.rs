@@ -1,21 +1,56 @@
 wit_bindgen_host_wasmtime_rust::export!("./wit/imports.wit");
 wit_bindgen_host_wasmtime_rust::export!("./wit/log.wit");
+wit_bindgen_host_wasmtime_rust::export!("./wit/sync-request.wit");
+
 wit_bindgen_host_wasmtime_rust::import!("./wit/exports.wit");
 
 use std::path::Path;
 
 use imports::*;
+use sync_request::*;
+
 use matrix_sdk::ruma::{RoomId, UserId};
 use wasmtime::AsContextMut;
 
 #[derive(Default)]
 pub struct ModuleState {
     module_name: String,
+    client: reqwest::blocking::Client,
 }
 
 impl Imports for ModuleState {
     fn rand_u64(&mut self) -> u64 {
         rand::random()
+    }
+}
+
+impl sync_request::SyncRequest for ModuleState {
+    fn request(&mut self, req: Request<'_>) -> Result<Response, ()> {
+        let url = req.url;
+        let mut builder = match req.verb {
+            RequestVerb::Get => self.client.get(url),
+            RequestVerb::Put => self.client.put(url),
+            RequestVerb::Delete => self.client.delete(url),
+            RequestVerb::Post => self.client.post(url),
+        };
+        for header in req.headers {
+            builder = builder.header(header.key, header.value);
+        }
+        if let Some(body) = req.body {
+            builder = builder.body(body.to_owned());
+        }
+        let req = builder.build().map_err(|_| ())?;
+
+        let resp = self.client.execute(req).map_err(|_| ())?;
+
+        let status = match resp.status().as_u16() / 100 {
+            2 => ResponseStatus::Success,
+            _ => ResponseStatus::Error,
+        };
+
+        let body = resp.text().ok();
+
+        Ok(Response { status, body })
     }
 }
 
@@ -80,6 +115,9 @@ pub(crate) struct WasmModules {
 }
 
 impl WasmModules {
+    /// Create a new collection of wasm modules.
+    ///
+    /// Must be called from a blocking context.
     pub fn new(modules_path: &Path) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
 
@@ -111,6 +149,7 @@ impl WasmModules {
 
             let module_state = ModuleState {
                 module_name: name.clone(),
+                client: reqwest::blocking::Client::default(),
             };
 
             let entry = store.data_mut().imports.len();
@@ -120,6 +159,7 @@ impl WasmModules {
 
             imports::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
             log::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
+            sync_request::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
 
             tracing::debug!(
                 "compiling wasm module: {name} @ {}...",

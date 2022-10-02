@@ -1,13 +1,12 @@
 [package]
-name = "uuid"
+name = "wit-sync-request"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uuid = "1.1.2"
+log = "0.4.17"
 wit-bindgen-guest-rust.workspace = true
 
 [lib]
-crate-type = ["cdylib"]
