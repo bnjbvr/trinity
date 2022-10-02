@@ -1,4 +1,9 @@
 [workspace]
 members = [
-    "./uuid"
+    "./uuid",
+    "./wit-log",
 ]
+
+[workspace.dependencies]
+wit-log = { path = "./wit-log" }
+wit-bindgen-guest-rust = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "aca3671" }

@@ -1,0 +1,5 @@
+trace: func(s: string)
+debug: func(s: string)
+info: func(s: string)
+warn: func(s: string)
+error: func(s: string)

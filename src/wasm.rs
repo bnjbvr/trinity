@@ -1,4 +1,5 @@
 wit_bindgen_host_wasmtime_rust::export!("./wit/imports.wit");
+wit_bindgen_host_wasmtime_rust::export!("./wit/log.wit");
 wit_bindgen_host_wasmtime_rust::import!("./wit/exports.wit");
 
 use std::path::Path;
@@ -8,33 +9,43 @@ use matrix_sdk::ruma::{RoomId, UserId};
 use wasmtime::AsContextMut;
 
 #[derive(Default)]
-pub struct ModuleImports {
+pub struct ModuleState {
     module_name: String,
 }
 
-impl Imports for ModuleImports {
+impl Imports for ModuleState {
     fn rand_u64(&mut self) -> u64 {
         rand::random()
     }
+}
 
+impl log::Log for ModuleState {
     fn trace(&mut self, msg: &str) {
         tracing::trace!("{} - {msg}", self.module_name);
     }
-
     fn debug(&mut self, msg: &str) {
         tracing::debug!("{} - {msg}", self.module_name);
+    }
+    fn info(&mut self, msg: &str) {
+        tracing::info!("{} - {msg}", self.module_name);
+    }
+    fn warn(&mut self, msg: &str) {
+        tracing::warn!("{} - {msg}", self.module_name);
+    }
+    fn error(&mut self, msg: &str) {
+        tracing::error!("{} - {msg}", self.module_name);
     }
 }
 
 #[derive(Default)]
-pub(crate) struct ModuleState {
-    imports: Vec<ModuleImports>,
+pub(crate) struct GuestState {
+    imports: Vec<ModuleState>,
     exports: exports::ExportsData,
 }
 
 pub(crate) struct Module {
     name: String,
-    exports: exports::Exports<ModuleState>,
+    exports: exports::Exports<GuestState>,
     _instance: wasmtime::Instance,
 }
 
@@ -45,7 +56,7 @@ impl Module {
 
     pub fn handle(
         &self,
-        store: impl AsContextMut<Data = ModuleState>,
+        store: impl AsContextMut<Data = GuestState>,
         content: &str,
         sender: &UserId,
         room: &RoomId,
@@ -61,7 +72,7 @@ impl Module {
     }
 }
 
-pub(crate) type WasmStore = wasmtime::Store<ModuleState>;
+pub(crate) type WasmStore = wasmtime::Store<GuestState>;
 
 pub(crate) struct WasmModules {
     store: WasmStore,
@@ -76,7 +87,7 @@ impl WasmModules {
 
         let mut compiled_modules = Vec::new();
 
-        let state = ModuleState::default();
+        let state = GuestState::default();
 
         // A `Store` is what will own instances, functions, globals, etc. All wasm
         // items are stored within a `Store`, and it's what we'll always be using to
@@ -98,15 +109,17 @@ impl WasmModules {
                 .unwrap_or_else(|| module_path.to_string_lossy())
                 .to_string();
 
-            let module_state = ModuleImports {
+            let module_state = ModuleState {
                 module_name: name.clone(),
             };
 
             let entry = store.data_mut().imports.len();
             store.data_mut().imports.push(module_state);
 
-            let mut linker = wasmtime::Linker::<ModuleState>::new(&engine);
+            let mut linker = wasmtime::Linker::<GuestState>::new(&engine);
+
             imports::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
+            log::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
 
             tracing::debug!(
                 "compiling wasm module: {name} @ {}...",
@@ -119,6 +132,9 @@ impl WasmModules {
                 exports::Exports::instantiate(&mut store, &module, &mut linker, |s| {
                     &mut s.exports
                 })?;
+
+            tracing::debug!("calling module's init function...");
+            exports.init(&mut store)?;
 
             tracing::debug!("great success!");
             compiled_modules.push(Module {

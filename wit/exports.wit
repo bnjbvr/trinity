@@ -1,8 +1,8 @@
-help: func() -> string
-
 record message {
     content: string,
     to: string
 }
 
+init: func()
+help: func() -> string
 on-msg: func(content: string, author-id: string, author-name: string, room: string) -> list<message>

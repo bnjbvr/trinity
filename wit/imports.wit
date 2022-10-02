@@ -1,4 +1,1 @@
 rand-u64: func() -> u64
-
-trace: func(s: string)
-debug: func(s: string)

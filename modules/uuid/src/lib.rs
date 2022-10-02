@@ -1,9 +1,17 @@
 wit_bindgen_guest_rust::import!("../../wit/imports.wit");
 wit_bindgen_guest_rust::export!("../../wit/exports.wit");
 
+use wit_log;
+
 struct Exports;
 
 impl exports::Exports for Exports {
+    fn init() {
+        let _ = log::set_boxed_logger(Box::new(crate::wit_log::WitLog::new()));
+        log::set_max_level(log::LevelFilter::Trace);
+        log::trace!("Called the init() method \\o/");
+    }
+
     fn help() -> String {
         "Simple uuid generator".to_owned()
     }
@@ -14,10 +22,10 @@ impl exports::Exports for Exports {
         _author_name: String,
         _room: String,
     ) -> Vec<exports::Message> {
-        imports::trace("hello from wasm module!");
+        log::trace!("hello from wasm module!");
 
         if !content.starts_with("!uuid") {
-            imports::trace(&format!("message '{}' doesn't start with !uuid", content));
+            log::trace!("message '{}' doesn't start with !uuid", content);
             return vec![];
         }
 
@@ -27,7 +35,7 @@ impl exports::Exports for Exports {
 
         let content = format!("{uuid}");
 
-        imports::trace("definitely returning a message now!");
+        log::trace!("definitely returning a message now!");
         vec![exports::Message {
             content,
             to: author_id,
