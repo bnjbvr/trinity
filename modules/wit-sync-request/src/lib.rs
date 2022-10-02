@@ -1,4 +1,3 @@
-use log;
 use std::collections::HashMap;
 
 mod wit {

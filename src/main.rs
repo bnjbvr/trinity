@@ -118,7 +118,7 @@ async fn on_message(
         return Ok(());
     }
 
-    if let Some(ref unredacted) = ev.as_original() {
+    if let Some(unredacted) = ev.as_original() {
         let content = if let MessageType::Text(text) = &unredacted.content.msgtype {
             text.body.to_string()
         } else {
