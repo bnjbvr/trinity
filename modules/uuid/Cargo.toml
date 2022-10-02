@@ -1,0 +1,13 @@
+[package]
+name = "uuid"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+uuid = "1.1.2"
+wit-bindgen-guest-rust = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "aca3671" }
+
+[lib]
+crate-type = ["cdylib"]
