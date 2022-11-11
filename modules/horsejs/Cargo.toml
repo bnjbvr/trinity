@@ -21,4 +21,4 @@ sync-request = "../../wit/sync-request.wit"
 log = "../../wit/log.wit"
 
 [package.metadata.component.exports]
-interface = "../../wit/exports.wit"
+interface = "../../wit/trinity-module.wit"

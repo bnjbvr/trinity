@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 direct-export = "interface"
 
 [package.metadata.component.imports]
-imports = "../../wit/imports.wit"
+sys = "../../wit/sys.wit"
 
 [package.metadata.component.exports]
-interface = "../../wit/exports.wit"
+interface = "../../wit/trinity-module.wit"
