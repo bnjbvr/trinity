@@ -4,6 +4,7 @@ members = [
     "./horsejs",
     "./pun",
     "./uuid",
+    "./secret",
 
     # Libs
     "./wit-log",

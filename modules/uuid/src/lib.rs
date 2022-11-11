@@ -30,6 +30,10 @@ impl interface::Interface for Component {
             to: author_id,
         }]
     }
+
+    fn admin(_cmd: String, _author: String) -> Vec<interface::Message> {
+        Vec::new()
+    }
 }
 
 bindings::export!(Component);
