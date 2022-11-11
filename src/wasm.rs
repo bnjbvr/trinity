@@ -127,10 +127,6 @@ impl WasmModules {
 
         let state = GuestState::default();
 
-        // A `Store` is what will own instances, functions, globals, etc. All wasm
-        // items are stored within a `Store`, and it's what we'll always be using to
-        // interact with the wasm world. Custom data can be stored in stores but for
-        // now we just use `()`.
         let mut store = wasmtime::Store::new(&engine, state);
 
         tracing::debug!("precompiling wasm modules...");
