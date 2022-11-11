@@ -10,6 +10,7 @@ futures = "0.3.25"
 matrix-sdk = "0.6.2"
 notify = "5.0.0"
 rand = "0.8.5"
+redb = "0.9.0"
 reqwest = { version = "0.11.12", features = ["json", "blocking"] }
 tokio = { version = "1.21.2", features = ["rt-multi-thread", "macros"] }
 tracing = "0.1.37"

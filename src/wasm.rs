@@ -12,7 +12,7 @@ use std::path::Path;
 use matrix_sdk::ruma::{RoomId, UserId};
 use wasmtime::AsContextMut;
 
-use crate::wasm::apis::Apis;
+use crate::{wasm::apis::Apis, ShareableDatabase};
 
 pub struct ModuleState {
     apis: Apis,
@@ -70,6 +70,7 @@ impl Module {
 
 pub(crate) type WasmStore = wasmtime::Store<GuestState>;
 
+#[derive(Default)]
 pub(crate) struct WasmModules {
     store: WasmStore,
     modules: Vec<Module>,
@@ -79,7 +80,7 @@ impl WasmModules {
     /// Create a new collection of wasm modules.
     ///
     /// Must be called from a blocking context.
-    pub fn new(modules_path: &Path) -> anyhow::Result<Self> {
+    pub fn new(db: ShareableDatabase, modules_path: &Path) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
 
         let mut config = wasmtime::Config::new();
@@ -93,7 +94,7 @@ impl WasmModules {
 
         let mut store = wasmtime::Store::new(&engine, state);
 
-        tracing::debug!("precompiling wasm modules...");
+        tracing::debug!("precompiling wasm modules from {modules_path:?}...");
         for module_path in std::fs::read_dir(modules_path)? {
             let module_path = module_path?.path();
 
@@ -107,8 +108,9 @@ impl WasmModules {
                 .unwrap_or_else(|| module_path.to_string_lossy())
                 .to_string();
 
+            tracing::debug!("creating APIs...");
             let module_state = ModuleState {
-                apis: Apis::new(name.clone()),
+                apis: Apis::new(name.clone(), db.clone())?,
             };
 
             let entry = store.data_mut().imports.len();
