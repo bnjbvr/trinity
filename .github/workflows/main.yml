@@ -57,7 +57,10 @@ jobs:
           - nightly
 
     steps:
+      - uses: actions/checkout@v2
+        
+      - name: Install cargo-component
+        run: cargo install --locked --git https://github.com/bytecodealliance/cargo-component
+
       - name: Check modules
-      - run: git clone --depth 1 https://github.com/bytecodealliance/cargo-component
-      - run: cargo install --locked --path ./cargo-component
-      - run: cargo component check
+        run: cargo component check
