@@ -18,7 +18,7 @@ This is a fun weekend project where I've written a new generic Matrix bot framew
 in Rust from scratch using the fantastic
 [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk) crate.
 
-Bot commands can be implemented as WebAssembly modules, using
+Bot commands can be implemented as WebAssembly components, using
 [Wasmtime](https://github.com/bytecodealliance/wasmtime) as the WebAssembly virtual machine, and
 [wit-bindgen](https://github.com/bytecodealliance/wit-bindgen) for conveniently implementing
 interfaces between the host and wasm modules.
@@ -26,12 +26,15 @@ interfaces between the host and wasm modules.
 See for instance the [`uuid`](https://github.com/bnjbvr/trinity/blob/main/modules/uuid/src/lib.rs)
 and [`horsejs`](https://github.com/bnjbvr/trinity/blob/main/modules/horsejs/src/lib.rs) modules.
 
+Make sure to install [`cargo-component`](https://github.com/bytecodealliance/cargo-component) first
+to be able to build wasm components.
+
 Modules can be hot-reloaded, making it trivial to deploy new modules, or replace existing modules
 already running on a server. It is also nice during development iterations on modules. Basically
 one can do the following to see changes in close to real-time:
 
 - run trinity with `cargo run`
-- `cd modules/ && cargo watch -x "build --release"` in another terminal 
+- `cd modules/ && cargo watch -x "component build --release"` in another terminal 
 
 The overall generic design is inspired from my previous bot,
 [botzilla](https://github.com/bnjbvr/botzilla), that was written in JavaScript and was very
@@ -48,11 +51,7 @@ ideas, please go ahead :)
 - fetch and cache user names
 - make it possible to answer privately / to the full room / as a reply to the original message / as
   a thread reply.
-- admin / ACL module that allows to dynamically enable which commands are enabled in which matrix
-  rooms
 - add ability to set emojis on specific messages (? this was useful for the admin module in botzilla)
-- key/value store + wit API so modules can remember things across loads, using
-  [redb](https://github.com/cberner/redb/) on the host.
 - moonshot: JS host so one can test the chat modules on a Web browser, without requiring a matrix
   account
     - marsshot: existing modules built from CI and pushed to a simple Web app on github-pages that
@@ -61,9 +60,6 @@ ideas, please go ahead :)
 
 ### Modules
 
-- post something on mastodon. Example: `!toot Something nice and full of care for the community out there`
-    - this assumes a preconfigured room attached to a Mastodon account (via token), maybe ACLs to
-      define who can post
 - post on twitter. Example: `!tweet Inflammatory take that will receive millions of likes and quote-tweets`
     - same requirements as mastodon, likely
 - gitlab auto-link to issues/merge requests: e.g. if someone types `!123`, post a link to
