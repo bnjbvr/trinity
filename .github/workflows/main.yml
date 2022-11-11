@@ -65,4 +65,5 @@ jobs:
         run: cargo install --locked --git https://github.com/bytecodealliance/cargo-component
 
       - name: Check modules
+        working-directory: ./modules/
         run: cargo component check
