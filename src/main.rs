@@ -27,6 +27,7 @@ struct BotConfig {
     user_id: String,
     password: String,
     matrix_store_path: String,
+    redb_path: String,
     admin_user_id: OwnedUserId,
 }
 
@@ -39,6 +40,7 @@ fn get_config() -> anyhow::Result<BotConfig> {
     let user_id = env::var("BOT_USER_ID").context("missing bot user id in BOT_USER_ID")?;
     let password = env::var("BOT_PWD").context("missing bot user id in BOT_PWD")?;
     let matrix_store_path = env::var("MATRIX_STORE_PATH").context("missing MATRIX_STORE_PATH")?;
+    let redb_path = env::var("REDB_PATH").context("missing REDB_PATH")?;
 
     let admin_user_id =
         env::var("ADMIN_USER_ID").context("missing admin user id in ADMIN_USER_ID")?;
@@ -52,26 +54,36 @@ fn get_config() -> anyhow::Result<BotConfig> {
         password,
         matrix_store_path,
         admin_user_id,
+        redb_path,
     })
 }
+
+pub(crate) type ShareableDatabase = Arc<redb::Database>;
 
 struct AppCtx {
     modules: WasmModules,
     modules_path: PathBuf,
     needs_recompile: bool,
     admin_user_id: OwnedUserId,
+    db: ShareableDatabase,
 }
 
 impl AppCtx {
     /// Create a new `AppCtx`.
     ///
     /// Must be called from a blocking context.
-    pub fn new(modules_path: PathBuf, admin_user_id: OwnedUserId) -> anyhow::Result<Self> {
+    pub fn new(
+        modules_path: PathBuf,
+        redb_path: String,
+        admin_user_id: OwnedUserId,
+    ) -> anyhow::Result<Self> {
+        let db = Arc::new(unsafe { redb::Database::create(redb_path, 1024 * 1024)? });
         Ok(Self {
-            modules: WasmModules::new(&modules_path)?,
+            modules: WasmModules::new(db.clone(), &modules_path)?,
             modules_path,
             needs_recompile: false,
             admin_user_id,
+            db,
         })
     }
 
@@ -90,9 +102,14 @@ impl AppCtx {
                 ptr.lock().await
             });
 
-            if let Ok(modules) = WasmModules::new(&ptr.modules_path) {
-                ptr.modules = modules;
-                tracing::info!("successful hot reload!");
+            match WasmModules::new(ptr.db.clone(), &ptr.modules_path) {
+                Ok(modules) => {
+                    ptr.modules = modules;
+                    tracing::info!("successful hot reload!");
+                }
+                Err(err) => {
+                    tracing::error!("hot reload failed: {err:#}");
+                }
             }
 
             ptr.needs_recompile = false;
@@ -120,14 +137,20 @@ fn try_handle_admin<'a>(
     modules: impl Clone + Iterator<Item = &'a Module>,
 ) -> Option<Vec<String>> {
     let Some(rest) = content.strip_prefix("!admin") else { return None };
-
+    tracing::trace!("trying admin for {content}");
     if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
         if let Some((module, rest)) = rest.split_once(" ").map(|(l, r)| (l, r.trim())) {
             let mut found = None;
             for m in modules {
                 if m.name() == module {
-                    found = m.admin(&mut *store, rest.trim(), sender).ok();
+                    found = match m.admin(&mut *store, rest.trim(), sender) {
+                        Ok(msgs) => Some(msgs),
+                        Err(err) => {
+                            tracing::error!("error when handling admin command: {err:#}");
+                            None
+                        }
+                    };
                     break;
                 }
             }
@@ -152,10 +175,14 @@ fn try_handle_help<'a>(
         let mut msg = String::from("Available modules:");
         let mut html = String::from("Available modules: <ul>");
         for m in modules {
-            let help = m
-                .help(&mut *store, None)
-                .ok()
-                .unwrap_or("<missing>".to_string());
+            let help = match m.help(&mut *store, None) {
+                Ok(msg) => Some(msg),
+                Err(err) => {
+                    tracing::error!("error when handling help command: {err:#}");
+                    None
+                }
+            }
+            .unwrap_or("<missing>".to_string());
 
             msg.push_str(&format!("\n- {name}: {help}", name = m.name(), help = help));
             // TODO lol sanitize html
@@ -245,6 +272,7 @@ async fn on_message(
                 if let Some(admin_messages) =
                     try_handle_admin(&content, &ctx.admin_user_id, store, modules.clone())
                 {
+                    tracing::trace!("handled by admin, skipping modules");
                     return admin_messages
                         .into_iter()
                         .map(|msg| RoomMessageEventContent::text_plain(msg))
@@ -253,6 +281,7 @@ async fn on_message(
             }
 
             if let Some(help_messages) = try_handle_help(&content, store, modules.clone()) {
+                tracing::trace!("handled by help, skipping modules");
                 return help_messages;
             }
 
@@ -372,6 +401,7 @@ async fn real_main() -> anyhow::Result<()> {
     let app_ctx = tokio::task::spawn_blocking(|| {
         AppCtx::new(
             "./modules/target/wasm32-unknown-unknown/release/".into(),
+            config.redb_path,
             config.admin_user_id,
         )
     })

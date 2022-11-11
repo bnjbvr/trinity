@@ -160,6 +160,8 @@ name = "secret"
 version = "0.1.0"
 dependencies = [
  "secret-bindings",
+ "wit-kv",
+ "wit-log",
 ]
 
 [[package]]
@@ -386,6 +388,16 @@ dependencies = [
  "wasmparser",
  "wat",
  "wit-parser",
+]
+
+[[package]]
+name = "wit-kv"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "wit-bindgen-guest-rust",
 ]
 
 [[package]]
