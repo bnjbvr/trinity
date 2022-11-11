@@ -1,95 +1,21 @@
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/sys.wit",
-    name: "sys"
-});
-
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/log.wit",
-    name: "logs"
-});
-
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/sync-request.wit",
-    name: "sync-request"
-});
-
-mod glue {
+mod module {
     wit_bindgen_host_wasmtime_rust::generate!({
         default: "./wit/trinity-module.wit",
         name: "interface"
     });
 }
 
-use std::path::Path;
+mod apis;
 
-use sync_request::*;
+use std::path::Path;
 
 use matrix_sdk::ruma::{RoomId, UserId};
 use wasmtime::AsContextMut;
 
-#[derive(Default)]
+use crate::wasm::apis::Apis;
+
 pub struct ModuleState {
-    module_name: String,
-    client: reqwest::blocking::Client,
-}
-
-impl sys::Sys for ModuleState {
-    fn rand_u64(&mut self) -> anyhow::Result<u64> {
-        Ok(rand::random())
-    }
-}
-
-impl sync_request::SyncRequest for ModuleState {
-    fn run_request(&mut self, req: Request) -> anyhow::Result<Result<Response, ()>> {
-        let url = req.url;
-        let mut builder = match req.verb {
-            RequestVerb::Get => self.client.get(url),
-            RequestVerb::Put => self.client.put(url),
-            RequestVerb::Delete => self.client.delete(url),
-            RequestVerb::Post => self.client.post(url),
-        };
-        for header in req.headers {
-            builder = builder.header(header.key, header.value);
-        }
-        if let Some(body) = req.body {
-            builder = builder.body(body.to_owned());
-        }
-        let req = builder.build()?;
-
-        let resp = self.client.execute(req)?;
-
-        let status = match resp.status().as_u16() / 100 {
-            2 => ResponseStatus::Success,
-            _ => ResponseStatus::Error,
-        };
-
-        let body = resp.text().ok();
-
-        Ok(Ok(Response { status, body }))
-    }
-}
-
-impl log::Log for ModuleState {
-    fn trace(&mut self, msg: String) -> anyhow::Result<()> {
-        tracing::trace!("{} - {msg}", self.module_name);
-        Ok(())
-    }
-    fn debug(&mut self, msg: String) -> anyhow::Result<()> {
-        tracing::debug!("{} - {msg}", self.module_name);
-        Ok(())
-    }
-    fn info(&mut self, msg: String) -> anyhow::Result<()> {
-        tracing::info!("{} - {msg}", self.module_name);
-        Ok(())
-    }
-    fn warn(&mut self, msg: String) -> anyhow::Result<()> {
-        tracing::warn!("{} - {msg}", self.module_name);
-        Ok(())
-    }
-    fn error(&mut self, msg: String) -> anyhow::Result<()> {
-        tracing::error!("{} - {msg}", self.module_name);
-        Ok(())
-    }
+    apis: Apis,
 }
 
 #[derive(Default)]
@@ -99,7 +25,7 @@ pub(crate) struct GuestState {
 
 pub(crate) struct Module {
     name: String,
-    exports: glue::Interface,
+    exports: module::Interface,
     _instance: wasmtime::component::Instance,
 }
 
@@ -114,7 +40,7 @@ impl Module {
         content: &str,
         sender: &UserId,
         room: &RoomId,
-    ) -> anyhow::Result<Vec<glue::Message>> {
+    ) -> anyhow::Result<Vec<module::Message>> {
         let msgs = self.exports.on_msg(
             store,
             content,
@@ -166,8 +92,7 @@ impl WasmModules {
                 .to_string();
 
             let module_state = ModuleState {
-                module_name: name.clone(),
-                client: reqwest::blocking::Client::default(),
+                apis: Apis::new(name.clone()),
             };
 
             let entry = store.data_mut().imports.len();
@@ -175,21 +100,19 @@ impl WasmModules {
 
             let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
 
-            sys::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
-            log::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
-            sync_request::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
+            apis::Apis::link(entry, &mut linker)?;
 
             tracing::debug!(
                 "compiling wasm module: {name} @ {}...",
                 module_path.to_string_lossy()
             );
 
-            let module = wasmtime::component::Component::from_file(&engine, &module_path)?;
+            let component = wasmtime::component::Component::from_file(&engine, &module_path)?;
 
-            tracing::debug!("instantiating wasm module: {name}...");
+            tracing::debug!("instantiating wasm component: {name}...");
 
             let (exports, instance) =
-                glue::Interface::instantiate(&mut store, &module, &mut linker)?;
+                module::Interface::instantiate(&mut store, &component, &mut linker)?;
 
             tracing::debug!("calling module's init function...");
             exports.init(&mut store)?;
