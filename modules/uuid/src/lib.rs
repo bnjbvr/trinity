@@ -1,7 +1,13 @@
-wit_bindgen_guest_rust::import!("../../wit/imports.wit");
-wit_bindgen_guest_rust::export!("../../wit/exports.wit");
+wit_bindgen_guest_rust::generate!({
+    import: "../../wit/imports.wit",
+    export: "../../wit/exports.wit",
+    name: "imports"
+});
 
 struct Exports;
+
+// TODO lol that sounds funny
+export_imports!(Exports);
 
 impl exports::Exports for Exports {
     fn init() {}

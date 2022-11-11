@@ -1,9 +1,15 @@
-wit_bindgen_guest_rust::export!("../../wit/exports.wit");
+wit_bindgen_guest_rust::generate!({
+    export: "../../wit/exports.wit",
+    name: "exports"
+});
 
 use wit_log;
 use wit_sync_request;
 
 struct Exports;
+
+// TODO wat
+export_exports!(Exports);
 
 impl Exports {
     fn get_pun(msg: &str) -> Option<String> {
