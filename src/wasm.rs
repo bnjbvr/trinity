@@ -1,6 +1,6 @@
 wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/imports.wit",
-    name: "imports"
+    import: "./wit/sys.wit",
+    name: "sys"
 });
 
 wit_bindgen_host_wasmtime_rust::generate!({
@@ -15,7 +15,7 @@ wit_bindgen_host_wasmtime_rust::generate!({
 
 mod glue {
     wit_bindgen_host_wasmtime_rust::generate!({
-        default: "./wit/exports.wit",
+        default: "./wit/trinity-module.wit",
         name: "interface"
     });
 }
@@ -33,7 +33,7 @@ pub struct ModuleState {
     client: reqwest::blocking::Client,
 }
 
-impl imports::Imports for ModuleState {
+impl sys::Sys for ModuleState {
     fn rand_u64(&mut self) -> anyhow::Result<u64> {
         Ok(rand::random())
     }
@@ -175,7 +175,7 @@ impl WasmModules {
 
             let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
 
-            imports::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
+            sys::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
             log::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
             sync_request::add_to_linker(&mut linker, move |s| &mut s.imports[entry])?;
 
