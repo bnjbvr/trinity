@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.65"
-dotenvy = "0.15.5"
-futures = "0.3.24"
-matrix-sdk = "0.6.0"
+anyhow = "1.0.66"
+dotenvy = "0.15.6"
+futures = "0.3.25"
+matrix-sdk = "0.6.2"
 notify = "5.0.0"
 rand = "0.8.5"
 reqwest = { version = "0.11.12", features = ["json", "blocking"] }
 tokio = { version = "1.21.2", features = ["rt-multi-thread", "macros"] }
-tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
 wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", features = ["component-model"] }
-wit-bindgen-host-wasmtime-rust = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "aed92eb" }
+wit-bindgen-host-wasmtime-rust = { git = "https://github.com/bytecodealliance/wit-bindgen" }

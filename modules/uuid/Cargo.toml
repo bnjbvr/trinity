@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-uuid = "1.1.2"
-wit-bindgen-guest-rust = { workspace = true }
+uuid = "1.2.1"
 wit-sys = { workspace = true }
 
 [lib]

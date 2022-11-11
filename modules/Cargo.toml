@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.dependencies]
-wit-bindgen-guest-rust = { git = "https://github.com/bytecodealliance/wit-bindgen", rev = "aed92eb" }
+wit-bindgen-guest-rust = { git = "https://github.com/bytecodealliance/wit-bindgen" }
 wit-log = { path = "./wit-log" }
 wit-sys = { path = "./wit-sys" }
 wit-sync-request = { path = "./wit-sync-request" }
