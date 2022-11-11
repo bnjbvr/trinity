@@ -3,11 +3,18 @@ name = "uuid"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-uuid = "1.1.2"
-wit-bindgen-guest-rust.workspace = true
+uuid = "1.2.1"
+wit-sys = { workspace = true }
 
 [lib]
 crate-type = ["cdylib"]
+
+[package.metadata.component]
+direct-export = "interface"
+
+[package.metadata.component.imports]
+imports = "../../wit/imports.wit"
+
+[package.metadata.component.exports]
+interface = "../../wit/exports.wit"

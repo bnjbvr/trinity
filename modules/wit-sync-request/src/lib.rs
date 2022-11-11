@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
 mod wit {
-    wit_bindgen_guest_rust::import!("../../wit/sync-request.wit");
+    wit_bindgen_guest_rust::generate!({
+        import: "../../wit/sync-request.wit",
+        name: "sync-request"
+    });
     pub use self::sync_request::*;
 }
 
@@ -80,6 +83,6 @@ impl Request {
             headers: &headers,
             body: self.body.as_deref(),
         };
-        wit::request(req)
+        wit::run_request(req)
     }
 }

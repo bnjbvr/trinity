@@ -34,20 +34,36 @@ jobs:
           command: fmt
           args: --all -- --check
 
-      - name: Format modules
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all --manifest-path ./modules/Cargo.toml -- --check
-
       - name: Check host
         uses: actions-rs/cargo@v1
         with:
           command: check
           args: --all --verbose
 
-      - name: Check modules
+  ci-modules:
+    env:
+        RUST_BACKTRACE: 1
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - nightly
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Format modules
         uses: actions-rs/cargo@v1
         with:
-          command: check
-          args: --all --manifest-path ./modules/Cargo.toml --verbose
+          command: fmt
+          args: --all --manifest-path ./modules/Cargo.toml -- --check
+        
+      - name: Install cargo-component
+        run: cargo install --locked --git https://github.com/bytecodealliance/cargo-component
+
+      - name: Check modules
+        working-directory: ./modules/
+        run: cargo component check

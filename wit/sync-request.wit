@@ -23,4 +23,4 @@ record response {
     body: option<string>,
 }
 
-request: func(req: request) -> result<response>
+run-request: func(req: request) -> result<response>

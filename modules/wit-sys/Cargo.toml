@@ -1,0 +1,9 @@
+[package]
+name = "wit-sys"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wit-bindgen-guest-rust.workspace = true
+
+[lib]
