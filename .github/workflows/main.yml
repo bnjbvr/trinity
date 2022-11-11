@@ -46,8 +46,18 @@ jobs:
           command: check
           args: --all --verbose
 
+  ci-modules:
+    env:
+        RUST_BACKTRACE: 1
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - nightly
+
+    steps:
       - name: Check modules
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --manifest-path ./modules/Cargo.toml --verbose
+      - run: git clone --depth 1 https://github.com/bytecodealliance/cargo-component
+      - run: cargo install --locked --path ./cargo-component
+      - run: cargo component check
