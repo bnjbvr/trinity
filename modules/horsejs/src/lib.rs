@@ -1,17 +1,10 @@
-wit_bindgen_guest_rust::generate!({
-    export: "../../wit/exports.wit",
-    name: "exports"
-});
-
-use wit_log;
+use bindings::interface;
+use wit_log as log;
 use wit_sync_request;
 
-struct Exports;
+struct Component;
 
-// TODO lol what does this even
-export_exports!(Exports);
-
-impl Exports {
+impl Component {
     fn get_quote(msg: &str) -> Option<String> {
         if !msg.starts_with("!horsejs") {
             return None;
@@ -39,9 +32,9 @@ impl Exports {
     }
 }
 
-impl exports::Exports for Exports {
+impl interface::Interface for Component {
     fn init() {
-        let _ = log::set_boxed_logger(Box::new(crate::wit_log::WitLog::new()));
+        let _ = log::set_boxed_logger(Box::new(crate::log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");
     }
@@ -55,9 +48,9 @@ impl exports::Exports for Exports {
         author_id: String,
         _author_name: String,
         _room: String,
-    ) -> Vec<exports::Message> {
+    ) -> Vec<interface::Message> {
         if let Some(content) = Self::get_quote(&content) {
-            vec![exports::Message {
+            vec![interface::Message {
                 content,
                 to: author_id,
             }]
@@ -66,3 +59,5 @@ impl exports::Exports for Exports {
         }
     }
 }
+
+bindings::export!(Component);

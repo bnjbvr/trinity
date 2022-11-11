@@ -45,12 +45,19 @@ dependencies = [
 name = "horsejs"
 version = "0.1.0"
 dependencies = [
- "log",
+ "horsejs-bindings",
  "serde",
  "serde_json",
- "wit-bindgen-guest-rust",
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb)",
  "wit-log",
  "wit-sync-request",
+]
+
+[[package]]
+name = "horsejs-bindings"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen)",
 ]
 
 [[package]]
@@ -120,12 +127,19 @@ dependencies = [
 name = "pun"
 version = "0.1.0"
 dependencies = [
- "log",
+ "pun-bindings",
  "serde",
  "serde_json",
- "wit-bindgen-guest-rust",
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb)",
  "wit-log",
  "wit-sync-request",
+]
+
+[[package]]
+name = "pun-bindings"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen)",
 ]
 
 [[package]]
@@ -223,7 +237,9 @@ name = "uuid"
 version = "0.1.0"
 dependencies = [
  "uuid 1.1.2",
- "wit-bindgen-guest-rust",
+ "uuid-bindings",
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb)",
+ "wit-sys",
 ]
 
 [[package]]
@@ -231,6 +247,13 @@ name = "uuid"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
+
+[[package]]
+name = "uuid-bindings"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen)",
+]
 
 [[package]]
 name = "version_check"
@@ -317,6 +340,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen-guest-rust"
+version = "0.3.0"
+source = "git+https://github.com/bytecodealliance/wit-bindgen#aed92eb1cf11cb6b5474cc2a88c808b440198bc6"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
 name = "wit-bindgen-guest-rust-macro"
 version = "0.3.0"
 source = "git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb#aed92eb1cf11cb6b5474cc2a88c808b440198bc6"
@@ -359,7 +390,7 @@ name = "wit-log"
 version = "0.1.0"
 dependencies = [
  "log",
- "wit-bindgen-guest-rust",
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb)",
 ]
 
 [[package]]
@@ -378,5 +409,12 @@ name = "wit-sync-request"
 version = "0.1.0"
 dependencies = [
  "log",
- "wit-bindgen-guest-rust",
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb)",
+]
+
+[[package]]
+name = "wit-sys"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust 0.3.0 (git+https://github.com/bytecodealliance/wit-bindgen?rev=aed92eb)",
 ]

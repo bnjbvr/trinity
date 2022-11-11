@@ -6,6 +6,8 @@ mod wit {
     pub use self::log::*;
 }
 
+pub use log::*;
+
 /// A log implementation based on calls to the host.
 pub struct WitLog {
     enabled: bool,

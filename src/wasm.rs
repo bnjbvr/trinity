@@ -13,10 +13,12 @@ wit_bindgen_host_wasmtime_rust::generate!({
     name: "sync-request"
 });
 
-wit_bindgen_host_wasmtime_rust::generate!({
-    export: "./wit/exports.wit",
-    name: "exports"
-});
+mod glue {
+    wit_bindgen_host_wasmtime_rust::generate!({
+        default: "./wit/exports.wit",
+        name: "interface"
+    });
+}
 
 use std::path::Path;
 
@@ -97,7 +99,7 @@ pub(crate) struct GuestState {
 
 pub(crate) struct Module {
     name: String,
-    exports: Exports,
+    exports: glue::Interface,
     _instance: wasmtime::component::Instance,
 }
 
@@ -112,8 +114,8 @@ impl Module {
         content: &str,
         sender: &UserId,
         room: &RoomId,
-    ) -> anyhow::Result<Vec<exports::Message>> {
-        let msgs = self.exports.exports().on_msg(
+    ) -> anyhow::Result<Vec<glue::Message>> {
+        let msgs = self.exports.on_msg(
             store,
             content,
             sender.as_str(),
@@ -138,7 +140,10 @@ impl WasmModules {
     pub fn new(modules_path: &Path) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
 
-        let engine = wasmtime::Engine::default();
+        let mut config = wasmtime::Config::new();
+        config.wasm_component_model(true);
+
+        let engine = wasmtime::Engine::new(&config)?;
 
         let mut compiled_modules = Vec::new();
 
@@ -183,10 +188,11 @@ impl WasmModules {
 
             tracing::debug!("instantiating wasm module: {name}...");
 
-            let (exports, instance) = Exports::instantiate(&mut store, &module, &mut linker)?;
+            let (exports, instance) =
+                glue::Interface::instantiate(&mut store, &module, &mut linker)?;
 
             tracing::debug!("calling module's init function...");
-            exports.exports().init(&mut store)?;
+            exports.init(&mut store)?;
 
             tracing::debug!("great success!");
             compiled_modules.push(Module {

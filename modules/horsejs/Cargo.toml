@@ -3,15 +3,23 @@ name = "horsejs"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-log = { version = "0.4.17", features = ["std"] }
 serde = { version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
 wit-bindgen-guest-rust.workspace = true
+
 wit-log.workspace = true
 wit-sync-request.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
+
+[package.metadata.component]
+direct-export = "interface"
+
+[package.metadata.component.imports]
+sync-request = "../../wit/sync-request.wit"
+log = "../../wit/log.wit"
+
+[package.metadata.component.exports]
+interface = "../../wit/exports.wit"

@@ -1,15 +1,8 @@
-wit_bindgen_guest_rust::generate!({
-    import: "../../wit/imports.wit",
-    export: "../../wit/exports.wit",
-    name: "imports"
-});
+use bindings::interface;
 
-struct Exports;
+struct Component;
 
-// TODO lol that sounds funny
-export_imports!(Exports);
-
-impl exports::Exports for Exports {
+impl interface::Interface for Component {
     fn init() {}
 
     fn help() -> String {
@@ -21,20 +14,22 @@ impl exports::Exports for Exports {
         author_id: String,
         _author_name: String,
         _room: String,
-    ) -> Vec<exports::Message> {
+    ) -> Vec<interface::Message> {
         if !content.starts_with("!uuid") {
             return vec![];
         }
 
-        let r1 = imports::rand_u64();
-        let r2 = imports::rand_u64();
+        let r1 = wit_sys::rand_u64();
+        let r2 = wit_sys::rand_u64();
         let uuid = uuid::Uuid::from_u64_pair(r1, r2);
 
         let content = format!("{uuid}");
 
-        vec![exports::Message {
+        vec![interface::Message {
             content,
             to: author_id,
         }]
     }
 }
+
+bindings::export!(Component);
