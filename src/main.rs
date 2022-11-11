@@ -5,9 +5,12 @@ use matrix_sdk::{
     config::SyncSettings,
     event_handler::Ctx,
     room::Room,
-    ruma::events::room::{
-        member::StrippedRoomMemberEvent,
-        message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
+    ruma::{
+        events::room::{
+            member::StrippedRoomMemberEvent,
+            message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
+        },
+        OwnedUserId, UserId,
     },
     Client,
 };
@@ -24,6 +27,7 @@ struct BotConfig {
     user_id: String,
     password: String,
     matrix_store_path: String,
+    admin_user_id: OwnedUserId,
 }
 
 fn get_config() -> anyhow::Result<BotConfig> {
@@ -36,11 +40,18 @@ fn get_config() -> anyhow::Result<BotConfig> {
     let password = env::var("BOT_PWD").context("missing bot user id in BOT_PWD")?;
     let matrix_store_path = env::var("MATRIX_STORE_PATH").context("missing MATRIX_STORE_PATH")?;
 
+    let admin_user_id =
+        env::var("ADMIN_USER_ID").context("missing admin user id in ADMIN_USER_ID")?;
+    let admin_user_id = admin_user_id
+        .try_into()
+        .context("impossible to parse admin user id")?;
+
     Ok(BotConfig {
         home_server,
         user_id,
         password,
         matrix_store_path,
+        admin_user_id,
     })
 }
 
@@ -48,17 +59,19 @@ struct AppCtx {
     modules: WasmModules,
     modules_path: PathBuf,
     needs_recompile: bool,
+    admin_user_id: OwnedUserId,
 }
 
 impl AppCtx {
     /// Create a new `AppCtx`.
     ///
     /// Must be called from a blocking context.
-    pub fn new(modules_path: PathBuf) -> anyhow::Result<Self> {
+    pub fn new(modules_path: PathBuf, admin_user_id: OwnedUserId) -> anyhow::Result<Self> {
         Ok(Self {
             modules: WasmModules::new(&modules_path)?,
             modules_path,
             needs_recompile: false,
+            admin_user_id,
         })
     }
 
@@ -100,6 +113,33 @@ impl App {
     }
 }
 
+fn try_handle_admin<'a>(
+    content: &str,
+    sender: &UserId,
+    store: &mut wasmtime::Store<GuestState>,
+    modules: impl Clone + Iterator<Item = &'a Module>,
+) -> Option<Vec<String>> {
+    let Some(rest) = content.strip_prefix("!admin") else { return None };
+
+    if let Some(rest) = rest.strip_prefix(' ') {
+        let rest = rest.trim();
+        if let Some((module, rest)) = rest.split_once(" ").map(|(l, r)| (l, r.trim())) {
+            let mut found = None;
+            for m in modules {
+                if m.name() == module {
+                    found = m.admin(&mut *store, rest.trim(), sender).ok();
+                    break;
+                }
+            }
+            found.map(|messages| messages.into_iter().map(|msg| msg.content).collect())
+        } else {
+            Some(vec!["missing command".to_owned()])
+        }
+    } else {
+        Some(vec!["missing module and command".to_owned()])
+    }
+}
+
 fn try_handle_help<'a>(
     content: &str,
     store: &mut wasmtime::Store<GuestState>,
@@ -138,6 +178,7 @@ fn try_handle_help<'a>(
         for m in modules {
             if m.name() == module {
                 found = m.help(&mut *store, topic.as_deref()).ok();
+                break;
             }
         }
         let msg = if let Some(content) = found {
@@ -194,11 +235,22 @@ async fn on_message(
         let room_id = room.room_id().to_owned();
 
         let messages = tokio::task::spawn_blocking(move || {
-            let mut ctx = futures::executor::block_on(ctx.lock());
+            let ctx = &mut *futures::executor::block_on(ctx.lock());
 
             let mut outgoing_messages = Vec::new();
 
             let (store, modules) = ctx.modules.iter();
+
+            if ev.sender() == &ctx.admin_user_id {
+                if let Some(admin_messages) =
+                    try_handle_admin(&content, &ctx.admin_user_id, store, modules.clone())
+                {
+                    return admin_messages
+                        .into_iter()
+                        .map(|msg| RoomMessageEventContent::text_plain(msg))
+                        .collect();
+                }
+            }
 
             if let Some(help_messages) = try_handle_help(&content, store, modules.clone()) {
                 return help_messages;
@@ -318,7 +370,10 @@ async fn real_main() -> anyhow::Result<()> {
 
     tracing::debug!("setting up app...");
     let app_ctx = tokio::task::spawn_blocking(|| {
-        AppCtx::new("./modules/target/wasm32-unknown-unknown/release/".into())
+        AppCtx::new(
+            "./modules/target/wasm32-unknown-unknown/release/".into(),
+            config.admin_user_id,
+        )
     })
     .await??;
     let app = App::new(app_ctx);

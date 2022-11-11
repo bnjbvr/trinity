@@ -42,6 +42,15 @@ impl Module {
         self.exports.help(store, topic)
     }
 
+    pub fn admin(
+        &self,
+        store: impl AsContextMut<Data = GuestState>,
+        cmd: &str,
+        sender: &UserId,
+    ) -> anyhow::Result<Vec<module::Message>> {
+        self.exports.admin(store, cmd, sender.as_str())
+    }
+
     pub fn handle(
         &self,
         store: impl AsContextMut<Data = GuestState>,
@@ -49,14 +58,13 @@ impl Module {
         sender: &UserId,
         room: &RoomId,
     ) -> anyhow::Result<Vec<module::Message>> {
-        let msgs = self.exports.on_msg(
+        self.exports.on_msg(
             store,
             content,
             sender.as_str(),
             "author name NYI",
             room.as_str(),
-        )?;
-        Ok(msgs)
+        )
     }
 }
 

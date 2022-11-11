@@ -156,6 +156,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
 
 [[package]]
+name = "secret"
+version = "0.1.0"
+dependencies = [
+ "secret-bindings",
+]
+
+[[package]]
+name = "secret-bindings"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"

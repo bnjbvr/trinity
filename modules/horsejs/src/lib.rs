@@ -58,6 +58,10 @@ impl interface::Interface for Component {
             vec![]
         }
     }
+
+    fn admin(_cmd: String, _author: String) -> Vec<interface::Message> {
+        Vec::new()
+    }
 }
 
 bindings::export!(Component);

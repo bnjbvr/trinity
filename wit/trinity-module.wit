@@ -5,4 +5,5 @@ record message {
 
 init: func()
 help: func(topic: option<string>) -> string
+admin: func(cmd: string, author-id: string) -> list<message>
 on-msg: func(content: string, author-id: string, author-name: string, room: string) -> list<message>
