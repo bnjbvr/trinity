@@ -17,7 +17,7 @@ use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
-use wasm::WasmModules;
+use wasm::{GuestState, Module, WasmModules};
 
 struct BotConfig {
     home_server: String,
@@ -100,6 +100,59 @@ impl App {
     }
 }
 
+fn try_handle_help<'a>(
+    content: &str,
+    store: &mut wasmtime::Store<GuestState>,
+    modules: impl Clone + Iterator<Item = &'a Module>,
+) -> Option<Vec<RoomMessageEventContent>> {
+    let Some(rest) = content.strip_prefix("!help") else { return None };
+
+    // Special handling for help messages.
+    let (msg, html) = if rest.trim().is_empty() {
+        let mut msg = String::from("Available modules:");
+        let mut html = String::from("Available modules: <ul>");
+        for m in modules {
+            let help = m
+                .help(&mut *store, None)
+                .ok()
+                .unwrap_or("<missing>".to_string());
+
+            msg.push_str(&format!("\n- {name}: {help}", name = m.name(), help = help));
+            // TODO lol sanitize html
+            html.push_str(&format!(
+                "<li><b>{name}</b>: {help}</li>",
+                name = m.name(),
+                help = help
+            ));
+        }
+        html.push_str("</ul>");
+
+        (msg, html)
+    } else if let Some(rest) = rest.strip_prefix(' ') {
+        let rest = rest.trim();
+        let (module, topic) = rest
+            .split_once(" ")
+            .map(|(l, r)| (l, Some(r.trim())))
+            .unwrap_or((rest, None));
+        let mut found = None;
+        for m in modules {
+            if m.name() == module {
+                found = m.help(&mut *store, topic.as_deref()).ok();
+            }
+        }
+        let msg = if let Some(content) = found {
+            content
+        } else {
+            format!("module {module} not found")
+        };
+        (msg.clone(), msg)
+    } else {
+        return None;
+    };
+
+    Some(vec![RoomMessageEventContent::text_html(msg, html)])
+}
+
 async fn on_message(
     ev: SyncRoomMessageEvent,
     room: Room,
@@ -146,6 +199,11 @@ async fn on_message(
             let mut outgoing_messages = Vec::new();
 
             let (store, modules) = ctx.modules.iter();
+
+            if let Some(help_messages) = try_handle_help(&content, store, modules.clone()) {
+                return help_messages;
+            }
+
             for module in modules {
                 tracing::trace!("trying to handle message with {}...", module.name());
 

@@ -34,6 +34,14 @@ impl Module {
         self.name.as_str()
     }
 
+    pub fn help(
+        &self,
+        store: impl AsContextMut<Data = GuestState>,
+        topic: Option<&str>,
+    ) -> anyhow::Result<String> {
+        self.exports.help(store, topic)
+    }
+
     pub fn handle(
         &self,
         store: impl AsContextMut<Data = GuestState>,
@@ -131,7 +139,7 @@ impl WasmModules {
         })
     }
 
-    pub(crate) fn iter(&mut self) -> (&mut WasmStore, impl Iterator<Item = &Module>) {
+    pub(crate) fn iter(&mut self) -> (&mut WasmStore, impl Clone + Iterator<Item = &Module>) {
         (&mut self.store, self.modules.iter())
     }
 }

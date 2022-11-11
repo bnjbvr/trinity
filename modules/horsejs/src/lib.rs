@@ -39,7 +39,7 @@ impl interface::Interface for Component {
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help() -> String {
+    fn help(_topic: Option<String>) -> String {
         "Contextless twitter quotes about the JavaScript".to_owned()
     }
 
