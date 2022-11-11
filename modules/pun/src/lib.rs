@@ -40,8 +40,13 @@ impl interface::Interface for Component {
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help() -> String {
-        "Get radioactive puns straight from the internet!".to_owned()
+    fn help(topic: Option<String>) -> String {
+        if let Some(topic) = topic {
+            if topic == "toxic" {
+                return "this is content fetched from a website on the internet, so this may be toxic!".to_owned();
+            }
+        }
+        "Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned()
     }
 
     fn on_msg(

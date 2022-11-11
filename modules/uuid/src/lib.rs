@@ -5,7 +5,7 @@ struct Component;
 impl interface::Interface for Component {
     fn init() {}
 
-    fn help() -> String {
+    fn help(_topic: Option<String>) -> String {
         "Simple uuid generator".to_owned()
     }
 
