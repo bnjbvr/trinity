@@ -34,12 +34,6 @@ jobs:
           command: fmt
           args: --all -- --check
 
-      - name: Format modules
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all --manifest-path ./modules/Cargo.toml -- --check
-
       - name: Check host
         uses: actions-rs/cargo@v1
         with:
@@ -58,6 +52,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+
+      - uses: Swatinem/rust-cache@v1
+
+      - name: Format modules
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all --manifest-path ./modules/Cargo.toml -- --check
         
       - name: Install cargo-component
         run: cargo install --locked --git https://github.com/bytecodealliance/cargo-component
