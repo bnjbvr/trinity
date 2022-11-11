@@ -97,6 +97,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mastodon"
+version = "0.1.0"
+dependencies = [
+ "mastodon-bindings",
+ "serde",
+ "serde_json",
+ "wit-kv",
+ "wit-log",
+ "wit-sync-request",
+]
+
+[[package]]
+name = "mastodon-bindings"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust",
+]
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
