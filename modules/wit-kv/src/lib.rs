@@ -27,7 +27,10 @@ pub fn remove<T: serde::Serialize + ?Sized>(key: &T) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn set<T: serde::Serialize + ?Sized, V: serde::Serialize + ?Sized>(key: &T, val: &V) -> anyhow::Result<()> {
+pub fn set<T: serde::Serialize + ?Sized, V: serde::Serialize + ?Sized>(
+    key: &T,
+    val: &V,
+) -> anyhow::Result<()> {
     let key = serde_json::to_vec(key).context("couldn't serialize set key")?;
     let val = serde_json::to_vec(val).context("couldn't serialize set value")?;
     wit::set(&key, &val);

@@ -11,7 +11,9 @@ pub(super) struct LogApi {
 
 impl LogApi {
     pub fn new(module_name: &str) -> Self {
-        Self { module_name: module_name.to_owned() }
+        Self {
+            module_name: module_name.to_owned(),
+        }
     }
 
     pub fn link(
