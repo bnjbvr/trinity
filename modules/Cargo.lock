@@ -42,24 +42,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "horsejs"
-version = "0.1.0"
-dependencies = [
- "horsejs-bindings",
- "serde",
- "serde_json",
- "wit-log",
- "wit-sync-request",
-]
-
-[[package]]
-name = "horsejs-bindings"
-version = "0.1.0"
-dependencies = [
- "wit-bindgen-guest-rust",
-]
-
-[[package]]
 name = "id-arena"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -97,25 +79,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mastodon"
-version = "0.1.0"
-dependencies = [
- "mastodon-bindings",
- "serde",
- "serde_json",
- "wit-kv",
- "wit-log",
- "wit-sync-request",
-]
-
-[[package]]
-name = "mastodon-bindings"
-version = "0.1.0"
-dependencies = [
- "wit-bindgen-guest-rust",
-]
-
-[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -142,24 +105,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pun"
-version = "0.1.0"
-dependencies = [
- "pun-bindings",
- "serde",
- "serde_json",
- "wit-log",
- "wit-sync-request",
-]
-
-[[package]]
-name = "pun-bindings"
-version = "0.1.0"
-dependencies = [
- "wit-bindgen-guest-rust",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -175,40 +120,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4501abdff3ae82a1c1b477a17252eb69cee9e66eb915c1abaa4f44d873df9f09"
 
 [[package]]
-name = "secret"
-version = "0.1.0"
-dependencies = [
- "secret-bindings",
- "wit-kv",
- "wit-log",
-]
-
-[[package]]
-name = "secret-bindings"
-version = "0.1.0"
-dependencies = [
- "wit-bindgen-guest-rust",
-]
-
-[[package]]
 name = "serde"
 version = "1.0.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d193d69bae983fc11a79df82342761dfbf28a99fc8d203dca4c3c1b590948965"
-dependencies = [
- "serde_derive",
-]
-
-[[package]]
-name = "serde_derive"
-version = "1.0.147"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f1d362ca8fc9c3e3a7484440752472d68a6caa98f1ab81d99b5dfe517cec852"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
 
 [[package]]
 name = "serde_json"
@@ -270,7 +185,7 @@ name = "uuid"
 version = "0.1.0"
 dependencies = [
  "uuid 1.2.1",
- "uuid-bindings",
+ "wit-bindgen-guest-rust",
  "wit-sys",
 ]
 
@@ -279,13 +194,6 @@ name = "uuid"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "feb41e78f93363bb2df8b0e86a2ca30eed7806ea16ea0c790d757cf93f79be83"
-
-[[package]]
-name = "uuid-bindings"
-version = "0.1.0"
-dependencies = [
- "wit-bindgen-guest-rust",
-]
 
 [[package]]
 name = "version_check"

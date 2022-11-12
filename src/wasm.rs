@@ -116,7 +116,7 @@ impl WasmModules {
             let entry = store.data_mut().imports.len();
             store.data_mut().imports.push(module_state);
 
-            let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
+            let mut linker = wasmtime::Linker::<GuestState>::new(&engine);
 
             apis::Apis::link(entry, &mut linker)?;
 
@@ -125,12 +125,12 @@ impl WasmModules {
                 module_path.to_string_lossy()
             );
 
-            let component = wasmtime::component::Component::from_file(&engine, &module_path)?;
+            let module = wasmtime::Module::from_file(&engine, &module_path)?;
 
             tracing::debug!("instantiating wasm component: {name}...");
 
             let (exports, instance) =
-                module::Interface::instantiate(&mut store, &component, &mut linker)?;
+                module::Interface::instantiate(&mut store, &module, &mut linker)?;
 
             tracing::debug!("calling module's init function...");
             exports.init(&mut store)?;

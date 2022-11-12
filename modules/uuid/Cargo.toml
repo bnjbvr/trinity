@@ -6,15 +6,16 @@ edition = "2021"
 [dependencies]
 uuid = "1.2.1"
 wit-sys = { workspace = true }
+wit-bindgen-guest-rust.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
-[package.metadata.component]
-direct-export = "interface"
+#[package.metadata.component]
+#direct-export = "interface"
 
-[package.metadata.component.imports]
-sys = "../../wit/sys.wit"
+#[package.metadata.component.imports]
+#sys = "../../wit/sys.wit"
 
-[package.metadata.component.exports]
-interface = "../../wit/trinity-module.wit"
+#[package.metadata.component.exports]
+#interface = "../../wit/trinity-module.wit"

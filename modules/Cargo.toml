@@ -1,11 +1,7 @@
 [workspace]
 members = [
     # Modules
-    "./horsejs",
-    "./pun",
     "./uuid",
-    "./secret",
-    "./mastodon",
 
     # Libs
     "./wit-log",

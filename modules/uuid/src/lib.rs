@@ -1,4 +1,11 @@
-use bindings::interface;
+//use bindings::interface;
+
+wit_bindgen_guest_rust::generate!({
+    default: "../../wit/trinity-module.wit",
+    name: "interface"
+});
+
+export_interface!(Component);
 
 struct Component;
 
@@ -36,4 +43,4 @@ impl interface::Interface for Component {
     }
 }
 
-bindings::export!(Component);
+//bindings::export!(Component);

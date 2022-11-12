@@ -31,12 +31,12 @@ impl Apis {
 
     pub fn link(
         id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
+        linker: &mut wasmtime::Linker<GuestState>,
     ) -> anyhow::Result<()> {
         sys::SysApi::link(id, linker)?;
-        log::LogApi::link(id, linker)?;
-        sync_request::SyncRequestApi::link(id, linker)?;
-        kv_store::KeyValueStoreApi::link(id, linker)?;
+        //log::LogApi::link(id, linker)?;
+        //sync_request::SyncRequestApi::link(id, linker)?;
+        //kv_store::KeyValueStoreApi::link(id, linker)?;
         Ok(())
     }
 }

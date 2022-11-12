@@ -10,7 +10,7 @@ pub(super) struct SysApi;
 impl SysApi {
     pub fn link(
         id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
+        linker: &mut wasmtime::Linker<GuestState>,
     ) -> anyhow::Result<()> {
         sys::add_to_linker(linker, move |s| &mut s.imports[id].apis.sys)
     }
