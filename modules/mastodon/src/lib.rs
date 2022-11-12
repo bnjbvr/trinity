@@ -49,10 +49,6 @@ impl interface::Interface for Component {
                 });
             };
 
-            for admin in &credentials.admins {
-                log::warn!("{author_id} == {admin}? {:?}", author_id == *admin);
-            }
-
             if credentials.admins.iter().all(|admin| *admin != author_id) {
                 return vec![interface::Message {
                     content: "you're not authorized to post!".to_owned(),
