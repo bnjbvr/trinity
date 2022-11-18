@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use bindings::interface;
 use wit_log as log;
 use wit_sync_request;
+use wit_sys;
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
 struct RoomConfig {
@@ -19,7 +20,7 @@ impl RoomConfig {
 struct Component;
 
 impl Component {
-    fn run(author_id: &str, content: &str, room: &str) -> anyhow::Result<String> {
+    fn handle_msg(author_id: &str, content: &str, room: &str) -> anyhow::Result<String> {
         let mut config = wit_kv::get::<_, RoomConfig>(room)
             .context("couldn't read room configuration")?
             .context("missing room configuration")?;
@@ -62,12 +63,16 @@ impl Component {
         Ok("great success!".to_owned())
     }
 
-    fn run_admin(cmd: &str, sender: &str) -> anyhow::Result<String> {
+    fn handle_admin(cmd: &str, sender: &str) -> anyhow::Result<String> {
         if let Some(rest) = cmd.strip_prefix("set-config") {
             // Format: set-config ROOM BASE_URL TOKEN
             let mut split = rest.trim().split_whitespace();
 
             let room = split.next().context("missing room id")?;
+            let room = wit_sys::resolve_room(&room)
+                .map_err(|s| anyhow::anyhow!(s))
+                .context("resolving room failed")?;
+
             let base_url = split.next().context("missing base url")?;
             let token = split.next().context("missing token")?;
 
@@ -77,8 +82,23 @@ impl Component {
                 base_url: base_url.to_owned(),
             };
 
-            wit_kv::set(room, &config).context("writing to kv store")?;
+            wit_kv::set(&room, &config).context("writing to kv store")?;
+
             return Ok("added!".to_owned());
+        }
+
+        if let Some(rest) = cmd.strip_prefix("remove-config") {
+            // Format: remove-config ROOM
+            let mut split = rest.trim().split_whitespace();
+
+            let room = split.next().context("missing room id")?;
+            let room = wit_sys::resolve_room(&room)
+                .map_err(|s| anyhow::anyhow!(s))
+                .context("resolving room failed")?;
+
+            wit_kv::remove(&room).context("writing to kv store")?;
+
+            return Ok("removed config for that room!".to_owned());
         }
 
         if let Some(rest) = cmd.strip_prefix("allow") {
@@ -86,6 +106,10 @@ impl Component {
             let mut split = rest.trim().split_whitespace();
 
             let room = split.next().context("missing room id")?;
+            let room = wit_sys::resolve_room(&room)
+                .map_err(|s| anyhow::anyhow!(s))
+                .context("resolving room failed")?;
+
             let user_id = split.next().context("missing user id")?;
 
             let mut current = wit_kv::get::<_, RoomConfig>(&room)
@@ -95,7 +119,8 @@ impl Component {
             current.admins.push(user_id.to_owned());
 
             wit_kv::set(&room, &current).context("writing to kv store")?;
-            return Ok("added!".to_owned());
+
+            return Ok("added admin!".to_owned());
         }
 
         if let Some(rest) = cmd.strip_prefix("disallow") {
@@ -103,6 +128,10 @@ impl Component {
             let mut split = rest.trim().split_whitespace();
 
             let room = split.next().context("missing room id")?;
+            let room = wit_sys::resolve_room(&room)
+                .map_err(|s| anyhow::anyhow!(s))
+                .context("resolving room failed")?;
+
             let user_id = split.next().context("missing user id")?;
 
             let mut current = wit_kv::get::<_, RoomConfig>(&room)
@@ -116,7 +145,7 @@ impl Component {
             }
 
             wit_kv::set(&room, &current).context("writing to kv store")?;
-            return Ok("removed!".to_owned());
+            return Ok("removed admin!".to_owned());
         }
 
         if let Some(rest) = cmd.strip_prefix("list-posters") {
@@ -124,6 +153,9 @@ impl Component {
             let mut split = rest.trim().split_whitespace();
 
             let room = split.next().context("missing room id")?;
+            let room = wit_sys::resolve_room(&room)
+                .map_err(|s| anyhow::anyhow!(s))
+                .context("resolving room failed")?;
 
             let current = wit_kv::get::<_, RoomConfig>(&room)
                 .context("couldn't read room config for room")?
@@ -147,6 +179,7 @@ impl interface::Interface for Component {
             match topic.as_str() {
                 "admin" => r#"available admin commands:
 - set-config #ROOM_ID #BASE_URL #TOKEN
+- remove-config #ROOM_ID
 - allow #ROOM_ID #USER_ID
 - disallow #ROOM_ID #USER_ID
 - list-posters #ROOM_ID"#
@@ -168,7 +201,7 @@ impl interface::Interface for Component {
         let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
             return Vec::new();
         };
-        let content = match Self::run(&author_id, &content, &room) {
+        let content = match Self::handle_msg(&author_id, &content, &room) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
@@ -179,7 +212,7 @@ impl interface::Interface for Component {
     }
 
     fn admin(cmd: String, author: String) -> Vec<interface::Message> {
-        let content = match Self::run_admin(&cmd, &author) {
+        let content = match Self::handle_admin(&cmd, &author) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };

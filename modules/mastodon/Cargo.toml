@@ -9,6 +9,7 @@ serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
 
 wit-log.workspace = true
+wit-sys.workspace = true
 wit-sync-request.workspace = true
 wit-kv.workspace = true
 
@@ -22,6 +23,7 @@ direct-export = "interface"
 sync-request = "../../wit/sync-request.wit"
 kv = "../../wit/kv.wit"
 log = "../../wit/log.wit"
+sys = "../../wit/sys.wit"
 
 [package.metadata.component.exports]
 interface = "../../wit/trinity-module.wit"
