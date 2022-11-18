@@ -4,35 +4,35 @@ use wit_log as log;
 use wit_sync_request;
 
 #[derive(serde::Serialize, serde::Deserialize, Default)]
-struct Credentials {
+struct RoomConfig {
     admins: Vec<String>,
+    token: String,
+    base_url: String,
+}
+
+impl RoomConfig {
+    fn is_admin(&self, author: &str) -> bool {
+        self.admins.iter().any(|admin| *admin == author)
+    }
 }
 
 struct Component;
 
 impl Component {
-    fn run(author_id: &str, content: &str) -> anyhow::Result<String> {
-        let credentials = wit_kv::get::<_, Credentials>("credentials")
-            .context("couldn't read mastodon credentials")?
-            .context("missing credentials")?;
+    fn run(author_id: &str, content: &str, room: &str) -> anyhow::Result<String> {
+        let mut config = wit_kv::get::<_, RoomConfig>(room)
+            .context("couldn't read room configuration")?
+            .context("missing room configuration")?;
 
         anyhow::ensure!(
-            credentials.admins.iter().any(|admin| *admin == author_id),
+            config.is_admin(author_id),
             "you're not allowed to post, sorry!"
         );
 
-        let token = wit_kv::get::<_, String>("token")
-            .context("couldn't read mastodon token")?
-            .context("missing token")?;
-
-        let mut base_url = wit_kv::get::<_, String>("base_url")
-            .context("couldn't read mastodon base url")?
-            .context("missing base_url!")?;
-
-        if !base_url.ends_with("/") {
-            base_url.push('/');
+        if !config.base_url.ends_with("/") {
+            config.base_url.push('/');
         }
-        base_url.push_str("api/v1/statuses");
+        config.base_url.push_str("api/v1/statuses");
 
         #[derive(serde::Serialize)]
         struct Request {
@@ -43,8 +43,8 @@ impl Component {
             status: content.to_owned(),
         })?;
 
-        let resp = wit_sync_request::Request::post(&base_url)
-            .header("Authorization", &format!("Bearer {token}"))
+        let resp = wit_sync_request::Request::post(&config.base_url)
+            .header("Authorization", &format!("Bearer {}", config.token))
             .header("Content-Type", "application/json")
             .body(&body)
             .run()
@@ -61,6 +61,79 @@ impl Component {
 
         Ok("great success!".to_owned())
     }
+
+    fn run_admin(cmd: &str, sender: &str) -> anyhow::Result<String> {
+        if let Some(rest) = cmd.strip_prefix("set-config") {
+            // Format: set-config ROOM BASE_URL TOKEN
+            let mut split = rest.trim().split_whitespace();
+
+            let room = split.next().context("missing room id")?;
+            let base_url = split.next().context("missing base url")?;
+            let token = split.next().context("missing token")?;
+
+            let config = RoomConfig {
+                admins: vec![sender.to_owned()],
+                token: token.to_owned(),
+                base_url: base_url.to_owned(),
+            };
+
+            wit_kv::set(room, &config).context("writing to kv store")?;
+            return Ok("added!".to_owned());
+        }
+
+        if let Some(rest) = cmd.strip_prefix("allow") {
+            // Format: allow ROOM USER_ID
+            let mut split = rest.trim().split_whitespace();
+
+            let room = split.next().context("missing room id")?;
+            let user_id = split.next().context("missing user id")?;
+
+            let mut current = wit_kv::get::<_, RoomConfig>(&room)
+                .context("couldn't read room config for room")?
+                .context("missing config for room")?;
+
+            current.admins.push(user_id.to_owned());
+
+            wit_kv::set(&room, &current).context("writing to kv store")?;
+            return Ok("added!".to_owned());
+        }
+
+        if let Some(rest) = cmd.strip_prefix("disallow") {
+            // Format: disallow ROOM USER_ID
+            let mut split = rest.trim().split_whitespace();
+
+            let room = split.next().context("missing room id")?;
+            let user_id = split.next().context("missing user id")?;
+
+            let mut current = wit_kv::get::<_, RoomConfig>(&room)
+                .context("couldn't read room config for room")?
+                .context("missing config for room")?;
+
+            if let Some(idx) = current.admins.iter().position(|val| val == user_id) {
+                current.admins.remove(idx);
+            } else {
+                return Ok("admin not found".to_owned());
+            }
+
+            wit_kv::set(&room, &current).context("writing to kv store")?;
+            return Ok("removed!".to_owned());
+        }
+
+        if let Some(rest) = cmd.strip_prefix("list-posters") {
+            // Format: list-posters ROOM
+            let mut split = rest.trim().split_whitespace();
+
+            let room = split.next().context("missing room id")?;
+
+            let current = wit_kv::get::<_, RoomConfig>(&room)
+                .context("couldn't read room config for room")?
+                .context("no config for room")?;
+
+            return Ok(current.admins.join(", "));
+        }
+
+        Ok("unknown command!".into())
+    }
 }
 
 impl interface::Interface for Component {
@@ -72,15 +145,17 @@ impl interface::Interface for Component {
     fn help(topic: Option<String>) -> String {
         if let Some(topic) = topic {
             match topic.as_str() {
-                "admin" => {
-                    "available admin commands: allow #USER_ID/disallow #USER_ID/list-posters/set-base-url/set-token".into()
-                }
-                _ => {
-                    "i don't know this command!".into()
-                }
+                "admin" => r#"available admin commands:
+- set-config #ROOM_ID #BASE_URL #TOKEN
+- allow #ROOM_ID #USER_ID
+- disallow #ROOM_ID #USER_ID
+- list-posters #ROOM_ID"#
+                    .into(),
+                "toot" | "!toot" => "Toot a message with !toot MESSAGE".into(),
+                _ => "i don't know this command!".into(),
             }
         } else {
-            "Post mastodon statuses from Matrix!".to_owned()
+            "Post mastodon statuses from Matrix! Help topics: admin, toot".to_owned()
         }
     }
 
@@ -88,12 +163,12 @@ impl interface::Interface for Component {
         content: String,
         author_id: String,
         _author_name: String,
-        _room: String,
+        room: String,
     ) -> Vec<interface::Message> {
         let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
             return Vec::new();
         };
-        let content = match Self::run(&author_id, &content) {
+        let content = match Self::run(&author_id, &content, &room) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
@@ -104,44 +179,13 @@ impl interface::Interface for Component {
     }
 
     fn admin(cmd: String, author: String) -> Vec<interface::Message> {
-        let msg: String = if let Some(token) = cmd.strip_prefix("set-token") {
-            let _ = wit_kv::set("token", token.trim());
-            "token successfully set!".into()
-        } else if let Some(base_url) = cmd.strip_prefix("set-base-url") {
-            let _ = wit_kv::set("base_url", base_url.trim());
-            "base url successfully set!".into()
-        } else if cmd == "remove" {
-            let _ = wit_kv::remove("token");
-            "token successfully unset!".into()
-        } else if let Some(user_id) = cmd.strip_prefix("allow") {
-            let user_id = user_id.trim();
-            if let Ok(prev) = wit_kv::get::<_, Credentials>("credentials") {
-                let mut prev = prev.unwrap_or_default();
-                prev.admins.push(user_id.to_string());
-                let _ = wit_kv::set("credentials", &prev);
-            }
-            "admin successfully added!".into()
-        } else if let Some(user_id) = cmd.strip_prefix("disallow") {
-            let user_id = user_id.trim();
-            if let Ok(prev) = wit_kv::get::<_, Credentials>("credentials") {
-                let mut prev = prev.unwrap_or_default();
-                prev.admins.retain(|admin| admin != user_id);
-                let _ = wit_kv::set("credentials", &prev);
-            }
-            "admin successfully removed!".into()
-        } else if cmd == "list-posters" {
-            if let Ok(prev) = wit_kv::get::<_, Credentials>("credentials") {
-                let prev = prev.unwrap_or_default();
-                format!("posters: {}", prev.admins.join(", "))
-            } else {
-                "error when reading admins".into()
-            }
-        } else {
-            "i don't know this command".into()
+        let content = match Self::run_admin(&cmd, &author) {
+            Ok(resp) => resp,
+            Err(err) => err.to_string(),
         };
 
         vec![interface::Message {
-            content: msg.to_string(),
+            content,
             to: author,
         }]
     }
