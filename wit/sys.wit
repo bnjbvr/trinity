@@ -1,1 +1,3 @@
 rand-u64: func() -> u64
+
+resolve-room: func(room: string) -> result<string, string>
