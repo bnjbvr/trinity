@@ -107,6 +107,7 @@ dependencies = [
  "wit-kv",
  "wit-log",
  "wit-sync-request",
+ "wit-sys",
 ]
 
 [[package]]
