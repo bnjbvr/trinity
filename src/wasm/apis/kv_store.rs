@@ -9,14 +9,14 @@ wit_bindgen_host_wasmtime_rust::generate!({
 
 pub(super) struct KeyValueStoreApi {
     db: ShareableDatabase,
-    name: String,
+    module_name: String,
 }
 
 impl KeyValueStoreApi {
     pub fn new(db: ShareableDatabase, module_name: &str) -> anyhow::Result<Self> {
         Ok(Self {
             db,
-            name: module_name.to_owned(),
+            module_name: module_name.to_owned(),
         })
     }
 
@@ -30,7 +30,7 @@ impl KeyValueStoreApi {
 
 impl kv::Kv for KeyValueStoreApi {
     fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.name);
+        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
         let txn = self.db.begin_write()?;
         {
             let mut table = txn.open_table(table_def)?;
@@ -41,7 +41,7 @@ impl kv::Kv for KeyValueStoreApi {
     }
 
     fn get(&mut self, key: Vec<u8>) -> anyhow::Result<Option<Vec<u8>>> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.name);
+        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
         let txn = self.db.begin_read()?;
         let table = match txn.open_table(table_def) {
             Ok(table) => table,
@@ -62,7 +62,7 @@ impl kv::Kv for KeyValueStoreApi {
     }
 
     fn remove(&mut self, key: Vec<u8>) -> anyhow::Result<()> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.name);
+        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
         let txn = self.db.begin_write()?;
         {
             let mut table = txn.open_table(table_def)?;

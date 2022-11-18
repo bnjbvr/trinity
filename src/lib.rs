@@ -16,6 +16,7 @@ use matrix_sdk::{
     Client,
 };
 use notify::{RecursiveMode, Watcher};
+use redb::ReadableTable;
 use room_resolver::RoomResolver;
 use std::{env, path::PathBuf, sync::Arc};
 use tokio::{
@@ -89,11 +90,10 @@ impl AppCtx {
     pub fn new(
         client: Client,
         modules_path: PathBuf,
-        redb_path: String,
+        db: ShareableDatabase,
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
-        let db = Arc::new(unsafe { redb::Database::create(redb_path, 1024 * 1024)? });
-        let room_resolver = RoomResolver::new(client.clone());
+        let room_resolver = RoomResolver::new(client);
         Ok(Self {
             modules: WasmModules::new(db.clone(), &modules_path)?,
             modules_path,
@@ -402,6 +402,38 @@ async fn on_stripped_state_member(
     }
 }
 
+const ADMIN_TABLE: redb::TableDefinition<str, [u8]> = redb::TableDefinition::new("@admin");
+
+fn read_from_admin_db(db: ShareableDatabase, key: &str) -> anyhow::Result<Option<Vec<u8>>> {
+    let txn = db.begin_read()?;
+    let table = match txn.open_table(ADMIN_TABLE) {
+        Ok(table) => table,
+        Err(err) => match err {
+            redb::Error::DatabaseAlreadyOpen
+            | redb::Error::InvalidSavepoint
+            | redb::Error::Corrupted(_)
+            | redb::Error::TableTypeMismatch(_)
+            | redb::Error::DbSizeMismatch { .. }
+            | redb::Error::TableAlreadyOpen(_, _)
+            | redb::Error::OutOfSpace
+            | redb::Error::Io(_)
+            | redb::Error::LockPoisoned(_) => Err(err)?,
+            redb::Error::TableDoesNotExist(_) => return Ok(None),
+        },
+    };
+    Ok(table.get(&key)?.map(|val| val.to_vec()))
+}
+
+fn write_in_admin_db(db: ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<()> {
+    let txn = db.begin_write()?;
+    {
+        let mut table = txn.open_table(ADMIN_TABLE)?;
+        table.insert(&key, &value)?;
+    }
+    txn.commit()?;
+    Ok(())
+}
+
 /// Run the client for the given `BotConfig`.
 pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let client = Client::builder()
@@ -410,12 +442,28 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
         .build()
         .await?;
 
+    // Create the database, and try to find a device id.
+    let db = Arc::new(unsafe { redb::Database::create(config.redb_path, 1024 * 1024)? });
+
     // First we need to log in.
     tracing::debug!("logging in...");
-    client
-        .login_username(&config.user_id, &config.password)
-        .send()
-        .await?;
+    let mut login_builder = client.login_username(&config.user_id, &config.password);
+
+    let mut db_device_id = None;
+    if let Some(device_id) = read_from_admin_db(db.clone(), "device_id")? {
+        db_device_id = Some(String::from_utf8(device_id)?);
+        login_builder = login_builder.device_id(db_device_id.as_ref().unwrap());
+    }
+
+    let resp = login_builder.send().await?;
+
+    if db_device_id.as_ref() != Some(&resp.device_id.to_string()) {
+        write_in_admin_db(
+            db.clone(),
+            "device_id",
+            resp.device_id.to_string().as_bytes(),
+        )?;
+    }
 
     client
         .user_id()
@@ -433,7 +481,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
         AppCtx::new(
             client_copy,
             "./modules/target/wasm32-unknown-unknown/release/".into(),
-            config.redb_path,
+            db,
             config.admin_user_id,
         )
     })
