@@ -61,6 +61,7 @@ fn get_config() -> anyhow::Result<BotConfig> {
 pub(crate) type ShareableDatabase = Arc<redb::Database>;
 
 struct AppCtx {
+    client: Client,
     modules: WasmModules,
     modules_path: PathBuf,
     needs_recompile: bool,
@@ -73,13 +74,15 @@ impl AppCtx {
     ///
     /// Must be called from a blocking context.
     pub fn new(
+        client: Client,
         modules_path: PathBuf,
         redb_path: String,
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
         let db = Arc::new(unsafe { redb::Database::create(redb_path, 1024 * 1024)? });
         Ok(Self {
-            modules: WasmModules::new(db.clone(), &modules_path)?,
+            client: client.clone(),
+            modules: WasmModules::new(client, db.clone(), &modules_path)?,
             modules_path,
             needs_recompile: false,
             admin_user_id,
@@ -102,7 +105,7 @@ impl AppCtx {
                 ptr.lock().await
             });
 
-            match WasmModules::new(ptr.db.clone(), &ptr.modules_path) {
+            match WasmModules::new(ptr.client.clone(), ptr.db.clone(), &ptr.modules_path) {
                 Ok(modules) => {
                     ptr.modules = modules;
                     tracing::info!("successful hot reload!");
@@ -398,8 +401,10 @@ async fn real_main() -> anyhow::Result<()> {
     client.sync_once(SyncSettings::default()).await.unwrap();
 
     tracing::debug!("setting up app...");
+    let client_copy = client.clone();
     let app_ctx = tokio::task::spawn_blocking(|| {
         AppCtx::new(
+            client_copy,
             "./modules/target/wasm32-unknown-unknown/release/".into(),
             config.redb_path,
             config.admin_user_id,

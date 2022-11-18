@@ -7,3 +7,4 @@ mod wit {
 }
 
 pub use wit::rand_u64;
+pub use wit::resolve_room;
