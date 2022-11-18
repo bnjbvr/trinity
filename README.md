@@ -12,10 +12,16 @@
   </p>
 </div>
 
+## TL;DR
+
+Trinity is an experimental bot framework written in Rust and using matrix-rust-sdk, as well as
+commands / modules compiled to WebAssembly, with convenient developer features like modules
+hot-reload.
+
 ## What is this?
 
-This is a fun weekend project where I've written a new generic Matrix bot framework. It is written
-in Rust from scratch using the fantastic
+This started as a fun weekend project where I've written a new generic Matrix bot framework. It is
+written in Rust from scratch using the fantastic
 [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk) crate.
 
 Bot commands can be implemented as WebAssembly components, using
