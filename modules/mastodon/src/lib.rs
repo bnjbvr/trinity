@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use bindings::interface;
 use wit_log as log;
 use wit_sync_request;
@@ -8,6 +9,59 @@ struct Credentials {
 }
 
 struct Component;
+
+impl Component {
+    fn run(author_id: &str, content: &str) -> anyhow::Result<String> {
+        let credentials = wit_kv::get::<_, Credentials>("credentials")
+            .context("couldn't read mastodon credentials")?
+            .context("missing credentials")?;
+
+        anyhow::ensure!(
+            credentials.admins.iter().any(|admin| *admin == author_id),
+            "you're not allowed to post, sorry!"
+        );
+
+        let token = wit_kv::get::<_, String>("token")
+            .context("couldn't read mastodon token")?
+            .context("missing token")?;
+
+        let mut base_url = wit_kv::get::<_, String>("base_url")
+            .context("couldn't read mastodon base url")?
+            .context("missing base_url!")?;
+
+        if !base_url.ends_with("/") {
+            base_url.push('/');
+        }
+        base_url.push_str("api/v1/statuses");
+
+        #[derive(serde::Serialize)]
+        struct Request {
+            status: String,
+        }
+
+        let body = serde_json::to_string(&Request {
+            status: content.to_owned(),
+        })?;
+
+        let resp = wit_sync_request::Request::post(&base_url)
+            .header("Authorization", &format!("Bearer {token}"))
+            .header("Content-Type", "application/json")
+            .body(&body)
+            .run()
+            .ok()
+            .context("no response")?;
+
+        if resp.status != wit_sync_request::ResponseStatus::Success {
+            log::info!(
+                "request failed with non-success status code:\n\t{:?}",
+                resp.body
+            );
+            anyhow::bail!("error when sending toot, see logs!");
+        }
+
+        Ok("great success!".to_owned())
+    }
+}
 
 impl interface::Interface for Component {
     fn init() {
@@ -36,97 +90,17 @@ impl interface::Interface for Component {
         _author_name: String,
         _room: String,
     ) -> Vec<interface::Message> {
-        if let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) {
-            let Ok(credentials): Result<Option<Credentials>, _> = wit_kv::get("credentials") else {
-                log::warn!("couldn't read mastodon credentials");
-                return Vec::new();
-            };
-
-            let Some(credentials) = credentials else {
-                return vec!(interface::Message {
-                    content: "missing credentials!".to_owned(),
-                    to: author_id,
-                });
-            };
-
-            if credentials.admins.iter().all(|admin| *admin != author_id) {
-                return vec![interface::Message {
-                    content: "you're not authorized to post!".to_owned(),
-                    to: author_id,
-                }];
-            }
-
-            let Ok(token): Result<Option<String>, _> = wit_kv::get("token") else {
-                log::warn!("couldn't read mastodon token");
-                return Vec::new();
-            };
-
-            let Some(token) = token else {
-                return vec!(interface::Message {
-                    content: "missing token!".to_owned(),
-                    to: author_id,
-                });
-            };
-
-            let Ok(base_url): Result<Option<String>, _> = wit_kv::get("base_url") else {
-                log::warn!("couldn't read mastodon base url");
-                return Vec::new();
-            };
-
-            let Some(mut base_url) = base_url else {
-                return vec!(interface::Message {
-                    content: "missing base_url!".to_owned(),
-                    to: author_id,
-                });
-            };
-
-            if !base_url.ends_with("/") {
-                base_url.push('/');
-            }
-            base_url.push_str("api/v1/statuses");
-
-            #[derive(serde::Serialize)]
-            struct Request {
-                status: String,
-            }
-
-            let Ok(body) = serde_json::to_string(&Request {
-                    status: content.to_owned(),
-                }) else {
-                log::error!("error when serializing mastodon request");
-                return Vec::new();
-            };
-
-            let Some(resp) = wit_sync_request::Request::post(&base_url)
-                .header("Authorization", &format!("Bearer {token}"))
-                .header("Content-Type", "application/json")
-                .body(&body)
-                .run()
-                .ok() else {
-                return vec!(interface::Message {
-                    content: "no response".to_owned(),
-                    to: author_id,
-                });
-            };
-
-            if resp.status != wit_sync_request::ResponseStatus::Success {
-                log::info!(
-                    "request failed with non-success status code:\n\t{:?}",
-                    resp.body
-                );
-                return vec![interface::Message {
-                    content: "error when sending toot, see logs!".to_owned(),
-                    to: author_id,
-                }];
-            }
-
-            return vec![interface::Message {
-                content: "great success!".to_owned(),
-                to: author_id,
-            }];
-        }
-
-        Vec::new()
+        let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
+            return Vec::new();
+        };
+        let content = match Self::run(&author_id, &content) {
+            Ok(resp) => resp,
+            Err(err) => err.to_string(),
+        };
+        vec![interface::Message {
+            to: author_id,
+            content,
+        }]
     }
 
     fn admin(cmd: String, author: String) -> Vec<interface::Message> {
