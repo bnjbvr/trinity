@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use matrix_sdk::{
     ruma::{OwnedRoomAliasId, OwnedRoomId},
     Client,
@@ -12,11 +14,16 @@ wit_bindgen_host_wasmtime_rust::generate!({
 
 pub(super) struct SysApi {
     client: Client,
+    /// In-memory cache for the room alias to room id mapping.
+    room_cache: HashMap<OwnedRoomAliasId, OwnedRoomId>,
 }
 
 impl SysApi {
     pub fn new(client: Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            room_cache: Default::default(),
+        }
     }
 
     pub fn link(
@@ -44,17 +51,25 @@ impl sys::Sys for SysApi {
             Err(err) => return Ok(Err(err.to_string())),
         };
 
+        // Try cache first...
+        if let Some(cached) = self.room_cache.get(&room_alias) {
+            return Ok(Ok(cached.to_string()));
+        }
+
+        // ...but if it fails, sync query the server.
         let client = self.client.clone();
-        let response =
-            futures::executor::block_on(
-                async move { client.resolve_room_alias(&room_alias).await },
-            );
+        let room_alias_copy = room_alias.clone();
+        let response = futures::executor::block_on(async move {
+            client.resolve_room_alias(&room_alias_copy).await
+        });
 
         match response {
             Ok(result) => {
-                let room_id = result.room_id.to_string();
-                Ok(Ok(room_id))
+                let room_id = result.room_id;
+                self.room_cache.insert(room_alias, room_id.clone());
+                Ok(Ok(room_id.to_string()))
             }
+
             Err(err) => Ok(Err(err.to_string())),
         }
     }
