@@ -10,7 +10,7 @@ use matrix_sdk::{
             member::StrippedRoomMemberEvent,
             message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
         },
-        OwnedUserId, UserId,
+        OwnedUserId, UserId, RoomId,
     },
     Client,
 };
@@ -147,6 +147,7 @@ impl App {
 fn try_handle_admin<'a>(
     content: &str,
     sender: &UserId,
+    room: &RoomId,
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
 ) -> Option<Vec<String>> {
@@ -158,7 +159,7 @@ fn try_handle_admin<'a>(
             let mut found = None;
             for m in modules {
                 if m.name() == module {
-                    found = match m.admin(&mut *store, rest.trim(), sender) {
+                    found = match m.admin(&mut *store, rest.trim(), sender, room) {
                         Ok(msgs) => Some(msgs),
                         Err(err) => {
                             tracing::error!("error when handling admin command: {err:#}");
@@ -284,7 +285,7 @@ async fn on_message(
 
             if ev.sender() == &ctx.admin_user_id {
                 if let Some(admin_messages) =
-                    try_handle_admin(&content, &ctx.admin_user_id, store, modules.clone())
+                    try_handle_admin(&content, &ctx.admin_user_id, &room_id, store, modules.clone())
                 {
                     tracing::trace!("handled by admin, skipping modules");
                     return admin_messages

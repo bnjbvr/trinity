@@ -50,8 +50,9 @@ impl Module {
         store: impl AsContextMut<Data = GuestState>,
         cmd: &str,
         sender: &UserId,
+        room: &RoomId,
     ) -> anyhow::Result<Vec<module::Message>> {
-        self.exports.admin(store, cmd, sender.as_str())
+        self.exports.admin(store, cmd, sender.as_str(), room.as_str())
     }
 
     pub fn handle(

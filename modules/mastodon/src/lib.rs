@@ -211,7 +211,7 @@ impl interface::Interface for Component {
         }]
     }
 
-    fn admin(cmd: String, author: String) -> Vec<interface::Message> {
+    fn admin(cmd: String, author: String, _room: String) -> Vec<interface::Message> {
         let content = match Self::handle_admin(&cmd, &author) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),

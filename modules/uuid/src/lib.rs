@@ -31,7 +31,7 @@ impl interface::Interface for Component {
         }]
     }
 
-    fn admin(_cmd: String, _author: String) -> Vec<interface::Message> {
+    fn admin(_cmd: String, _author: String, _room: String) -> Vec<interface::Message> {
         Vec::new()
     }
 }
