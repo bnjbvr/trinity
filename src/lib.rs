@@ -1,3 +1,4 @@
+mod util;
 mod wasm;
 
 use anyhow::Context;
@@ -10,7 +11,7 @@ use matrix_sdk::{
             member::StrippedRoomMemberEvent,
             message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
         },
-        OwnedUserId, UserId, RoomId,
+        OwnedUserId, RoomId, UserId,
     },
     Client,
 };
@@ -20,6 +21,7 @@ use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
+use util::RoomResolver;
 use wasm::{GuestState, Module, WasmModules};
 
 /// The configuration to run a trinity instance with.
@@ -72,12 +74,12 @@ impl BotConfig {
 pub(crate) type ShareableDatabase = Arc<redb::Database>;
 
 struct AppCtx {
-    client: Client,
     modules: WasmModules,
     modules_path: PathBuf,
     needs_recompile: bool,
     admin_user_id: OwnedUserId,
     db: ShareableDatabase,
+    room_resolver: RoomResolver,
 }
 
 impl AppCtx {
@@ -91,13 +93,14 @@ impl AppCtx {
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
         let db = Arc::new(unsafe { redb::Database::create(redb_path, 1024 * 1024)? });
+        let room_resolver = RoomResolver::new(client.clone());
         Ok(Self {
-            client: client.clone(),
-            modules: WasmModules::new(client, db.clone(), &modules_path)?,
+            modules: WasmModules::new(db.clone(), &modules_path)?,
             modules_path,
             needs_recompile: false,
             admin_user_id,
             db,
+            room_resolver,
         })
     }
 
@@ -116,7 +119,7 @@ impl AppCtx {
                 ptr.lock().await
             });
 
-            match WasmModules::new(ptr.client.clone(), ptr.db.clone(), &ptr.modules_path) {
+            match WasmModules::new(ptr.db.clone(), &ptr.modules_path) {
                 Ok(modules) => {
                     ptr.modules = modules;
                     tracing::info!("successful hot reload!");
@@ -150,16 +153,33 @@ fn try_handle_admin<'a>(
     room: &RoomId,
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
+    room_resolver: &mut RoomResolver,
 ) -> Option<Vec<String>> {
     let Some(rest) = content.strip_prefix("!admin") else { return None };
     tracing::trace!("trying admin for {content}");
     if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
         if let Some((module, rest)) = rest.split_once(" ").map(|(l, r)| (l, r.trim())) {
+            // If the next word resolves to a valid room id use that, otherwise use the
+            // current room.
+            let (possible_room, rest) = rest
+                .split_once(" ")
+                .map_or((rest, ""), |(l, r)| (l, r.trim()));
+            let (target_room, rest) = match room_resolver.resolve_room(&possible_room) {
+                Ok(resolved_room) => match resolved_room {
+                    Some(resolved_room) => (resolved_room, rest.to_string()),
+                    None => (
+                        room.to_string(),
+                        format!("{} {}", possible_room, rest.to_string()),
+                    ),
+                },
+                Err(_) => (room.to_string(), format!("{} {}", possible_room, rest)),
+            };
+
             let mut found = None;
             for m in modules {
                 if m.name() == module {
-                    found = match m.admin(&mut *store, rest.trim(), sender, room) {
+                    found = match m.admin(&mut *store, rest.trim(), sender, target_room.as_str()) {
                         Ok(msgs) => Some(msgs),
                         Err(err) => {
                             tracing::error!("error when handling admin command: {err:#}");
@@ -284,9 +304,14 @@ async fn on_message(
             let (store, modules) = ctx.modules.iter();
 
             if ev.sender() == &ctx.admin_user_id {
-                if let Some(admin_messages) =
-                    try_handle_admin(&content, &ctx.admin_user_id, &room_id, store, modules.clone())
-                {
+                if let Some(admin_messages) = try_handle_admin(
+                    &content,
+                    &ctx.admin_user_id,
+                    &room_id,
+                    store,
+                    modules.clone(),
+                    &mut ctx.room_resolver,
+                ) {
                     tracing::trace!("handled by admin, skipping modules");
                     return admin_messages
                         .into_iter()

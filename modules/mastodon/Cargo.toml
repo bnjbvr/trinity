@@ -23,7 +23,6 @@ direct-export = "interface"
 sync-request = "../../wit/sync-request.wit"
 kv = "../../wit/kv.wit"
 log = "../../wit/log.wit"
-sys = "../../wit/sys.wit"
 
 [package.metadata.component.exports]
 interface = "../../wit/trinity-module.wit"

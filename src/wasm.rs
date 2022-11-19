@@ -9,10 +9,7 @@ mod apis;
 
 use std::path::Path;
 
-use matrix_sdk::{
-    ruma::{RoomId, UserId},
-    Client,
-};
+use matrix_sdk::ruma::{RoomId, UserId};
 use wasmtime::AsContextMut;
 
 use crate::{wasm::apis::Apis, ShareableDatabase};
@@ -50,9 +47,9 @@ impl Module {
         store: impl AsContextMut<Data = GuestState>,
         cmd: &str,
         sender: &UserId,
-        room: &RoomId,
+        room: &str,
     ) -> anyhow::Result<Vec<module::Message>> {
-        self.exports.admin(store, cmd, sender.as_str(), room.as_str())
+        self.exports.admin(store, cmd, sender.as_str(), room)
     }
 
     pub fn handle(
@@ -84,7 +81,7 @@ impl WasmModules {
     /// Create a new collection of wasm modules.
     ///
     /// Must be called from a blocking context.
-    pub fn new(client: Client, db: ShareableDatabase, modules_path: &Path) -> anyhow::Result<Self> {
+    pub fn new(db: ShareableDatabase, modules_path: &Path) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
 
         let mut config = wasmtime::Config::new();
@@ -114,7 +111,7 @@ impl WasmModules {
 
             tracing::debug!("creating APIs...");
             let module_state = ModuleState {
-                apis: Apis::new(client.clone(), name.clone(), db.clone())?,
+                apis: Apis::new(name.clone(), db.clone())?,
             };
 
             let entry = store.data_mut().imports.len();
