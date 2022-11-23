@@ -22,16 +22,26 @@ use tokio::{
 };
 use wasm::{GuestState, Module, WasmModules};
 
-struct BotConfig {
-    home_server: String,
-    user_id: String,
-    password: String,
-    matrix_store_path: String,
-    redb_path: String,
-    admin_user_id: OwnedUserId,
+
+/// The configuration to run a trininty instance with
+/// FIXME: should be properly typed!
+pub struct BotConfig {
+    /// the matrix homeserver the bot should connect to
+    pub home_server: String,
+    /// the user_id to be used on the homeserver
+    pub user_id: String,
+    /// password to be used to log into the homeserver wth
+    pub password: String,
+    /// where to store the matrix-sdk internal data
+    pub matrix_store_path: String,
+    /// where to store the addtional database data
+    pub redb_path: String,
+    /// the admin user id for the bot
+    pub admin_user_id: OwnedUserId,
 }
 
-fn get_config() -> anyhow::Result<BotConfig> {
+/// Generate a `BotConfig` form the programm environment.
+pub fn get_config_from_env() -> anyhow::Result<BotConfig> {
     // override environment variables with contents of .env file, unless they were already set
     // explicitly.
     dotenvy::dotenv().ok();
@@ -370,13 +380,19 @@ async fn on_stripped_state_member(
     }
 }
 
-async fn real_main() -> anyhow::Result<()> {
+pub async fn real_main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     tracing::debug!("parsing config...");
-    let config = get_config()?;
+    let config = get_config_from_env()?;
 
     tracing::debug!("creating client...");
+    run(config).await
+
+}
+
+/// Run the client for the given `BotConfig`
+pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let client = Client::builder()
         .server_name(config.home_server.as_str().try_into()?)
         .sled_store(&config.matrix_store_path, None)?
@@ -471,10 +487,4 @@ async fn watcher(app: Arc<Mutex<AppCtx>>) -> anyhow::Result<notify::RecommendedW
 
     tracing::debug!("watcher setup done!");
     Ok(watcher)
-}
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // just one trick to get rust-analyzer working in main :-)
-    real_main().await
 }

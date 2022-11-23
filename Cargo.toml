@@ -3,6 +3,14 @@ name = "trinity"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "trinity"
+path = "src/lib.rs"
+
+[[bin]]
+name = "trinity"
+path = "src/bin/main.rs"
+
 [dependencies]
 anyhow = "1.0.66"
 dotenvy = "0.15.6"
