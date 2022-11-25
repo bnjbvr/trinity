@@ -22,7 +22,6 @@ use tokio::{
 };
 use wasm::{GuestState, Module, WasmModules};
 
-
 /// The configuration to run a trininty instance with
 /// FIXME: should be properly typed!
 pub struct BotConfig {
@@ -388,7 +387,6 @@ pub async fn real_main() -> anyhow::Result<()> {
 
     tracing::debug!("creating client...");
     run(config).await
-
 }
 
 /// Run the client for the given `BotConfig`

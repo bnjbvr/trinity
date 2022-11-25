@@ -1,5 +1,5 @@
-use trinity;
 use anyhow;
+use trinity;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
