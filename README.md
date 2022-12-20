@@ -33,7 +33,9 @@ See for instance the [`uuid`](https://github.com/bnjbvr/trinity/blob/main/module
 and [`horsejs`](https://github.com/bnjbvr/trinity/blob/main/modules/horsejs/src/lib.rs) modules.
 
 Make sure to install [`cargo-component`](https://github.com/bytecodealliance/cargo-component) first
-to be able to build wasm components.
+to be able to build wasm components. We're using a pinned revision of this that can automatically
+be installed with `./modules/install-cargo-component.sh` at the moment; we hope to lift that
+limitation in the future.
 
 Modules can be hot-reloaded, making it trivial to deploy new modules, or replace existing modules
 already running on a server. It is also nice during development iterations on modules. Basically

@@ -62,9 +62,10 @@ jobs:
           args: --all --manifest-path ./modules/Cargo.toml -- --check
 
       - name: Install cargo-component
+        working-directory: ./modules/
         run: |
           rustup update
-          cargo component --version || cargo install --git https://github.com/bytecodealliance/cargo-component
+          cargo component --version || ./install-cargo-component.sh
 
       - name: Check modules
         working-directory: ./modules/
