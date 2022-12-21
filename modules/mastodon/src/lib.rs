@@ -81,7 +81,7 @@ impl Component {
             return Ok("added!".to_owned());
         }
 
-        if let Some(_) = cmd.strip_prefix("remove-config") {
+        if cmd.starts_with("remove-config") {
             // Format: remove-config
             wit_kv::remove(&room).context("writing to kv store")?;
 
@@ -124,10 +124,8 @@ impl Component {
             return Ok("removed admin!".to_owned());
         }
 
-        if let Some(rest) = cmd.strip_prefix("list-posters") {
+        if cmd.starts_with("list-posters") {
             // Format: list-posters ROOM
-            let mut split = rest.trim().split_whitespace();
-
             let current = wit_kv::get::<_, RoomConfig>(&room)
                 .context("couldn't read room config for room")?
                 .context("no config for room")?;
