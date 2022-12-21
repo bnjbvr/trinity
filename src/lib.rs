@@ -1,4 +1,4 @@
-mod util;
+mod room_resolver;
 mod wasm;
 
 use anyhow::Context;
@@ -16,12 +16,12 @@ use matrix_sdk::{
     Client,
 };
 use notify::{RecursiveMode, Watcher};
+use room_resolver::RoomResolver;
 use std::{env, path::PathBuf, sync::Arc};
 use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
-use util::RoomResolver;
 use wasm::{GuestState, Module, WasmModules};
 
 /// The configuration to run a trinity instance with.
