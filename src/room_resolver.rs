@@ -20,8 +20,8 @@ impl RoomResolver {
     }
 
     pub fn resolve_room(&mut self, room: &str) -> anyhow::Result<Option<String>> {
-        // This is likely not meant to be a room.
-        if !&room.starts_with("#") {
+        if !room.starts_with("#") && !room.starts_with("!") {
+            // This is likely not meant to be a room.
             return Ok(None);
         }
 
@@ -30,7 +30,7 @@ impl RoomResolver {
             return Ok(Some(room_id.to_string()));
         };
 
-        // Try to resolve the room alias.
+        // Try to resolve the room alias; if it's not valid, we report an error to the caller here.
         let room_alias = OwnedRoomAliasId::try_from(room)?;
 
         // Try cache first...
