@@ -23,7 +23,7 @@ impl interface::Interface for Component {
         Vec::new()
     }
 
-    fn admin(cmd: String, author_id: String) -> Vec<interface::Message> {
+    fn admin(cmd: String, author_id: String, _room: String) -> Vec<interface::Message> {
         let mut msg = None;
 
         match cmd.split_once(" ") {

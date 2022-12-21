@@ -3,8 +3,6 @@ mod log;
 mod sync_request;
 mod sys;
 
-use matrix_sdk::Client;
-
 use crate::ShareableDatabase;
 
 use self::kv_store::KeyValueStoreApi;
@@ -22,9 +20,9 @@ pub(crate) struct Apis {
 }
 
 impl Apis {
-    pub fn new(client: Client, module_name: String, db: ShareableDatabase) -> anyhow::Result<Self> {
+    pub fn new(module_name: String, db: ShareableDatabase) -> anyhow::Result<Self> {
         Ok(Self {
-            sys: SysApi::new(client),
+            sys: SysApi {},
             log: LogApi::new(&module_name),
             sync_request: SyncRequestApi::default(),
             kv_store: KeyValueStoreApi::new(db, &module_name)?,
