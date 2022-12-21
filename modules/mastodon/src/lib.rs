@@ -151,11 +151,11 @@ impl interface::Interface for Component {
         if let Some(topic) = topic {
             match topic.as_str() {
                 "admin" => r#"available admin commands:
-- set-config #ROOM_ID #BASE_URL #TOKEN
-- remove-config #ROOM_ID
-- allow #ROOM_ID #USER_ID
-- disallow #ROOM_ID #USER_ID
-- list-posters #ROOM_ID"#
+- set-config #BASE_URL #TOKEN
+- remove-config
+- allow #USER_ID
+- disallow #USER_ID
+- list-posters"#
                     .into(),
                 "toot" | "!toot" => "Toot a message with !toot MESSAGE".into(),
                 _ => "i don't know this command!".into(),
