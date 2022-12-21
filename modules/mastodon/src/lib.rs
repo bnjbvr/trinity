@@ -128,8 +128,6 @@ impl Component {
             // Format: list-posters ROOM
             let mut split = rest.trim().split_whitespace();
 
-            let room = split.next().context("missing room id")?;
-
             let current = wit_kv::get::<_, RoomConfig>(&room)
                 .context("couldn't read room config for room")?
                 .context("no config for room")?;
