@@ -6,6 +6,7 @@ members = [
     "./uuid",
     "./secret",
     "./mastodon",
+    "./chatgpt",
 
     # Libs
     "./wit-log",

@@ -27,6 +27,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "chatgpt"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chatgpt-bindings",
+ "serde",
+ "serde_json",
+ "wit-kv",
+ "wit-log",
+ "wit-sync-request",
+ "wit-sys",
+]
+
+[[package]]
+name = "chatgpt-bindings"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-guest-rust",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
