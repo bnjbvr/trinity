@@ -165,15 +165,10 @@ fn try_handle_admin<'a>(
             let (possible_room, rest) = rest
                 .split_once(" ")
                 .map_or((rest, ""), |(l, r)| (l, r.trim()));
+
             let (target_room, rest) = match room_resolver.resolve_room(&possible_room) {
-                Ok(resolved_room) => match resolved_room {
-                    Some(resolved_room) => (resolved_room, rest.to_string()),
-                    None => (
-                        room.to_string(),
-                        format!("{} {}", possible_room, rest.to_string()),
-                    ),
-                },
-                Err(_) => (room.to_string(), format!("{} {}", possible_room, rest)),
+                Ok(Some(resolved_room)) => (resolved_room, rest.to_string()),
+                Ok(None) | Err(_) => (room.to_string(), format!("{} {}", possible_room, rest)),
             };
 
             let mut found = None;
