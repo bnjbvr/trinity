@@ -103,7 +103,7 @@ impl interface::Interface for Component {
                 _ => "i don't know this command!".into(),
             }
         } else {
-            "Chat using OpenGPT! Will respond to every message given it's configured in a room. Help topics: admin".to_owned()
+            "Chat using OpenAI! Will respond to every message given it's configured in a room. Help topics: admin".to_owned()
         }
     }
 
