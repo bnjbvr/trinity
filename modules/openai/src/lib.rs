@@ -4,8 +4,18 @@ use wit_log as log;
 use wit_sync_request;
 
 #[derive(serde::Serialize, serde::Deserialize)]
+enum TriggerMode {
+    /// Every message will be handled by this bot command, unless another handler caught it first
+    Always,
+
+    //// Only messages starting with !ai prefix will be handled
+    Prefix,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
 struct RoomConfig {
     token: String,
+    trigger: TriggerMode,
 }
 
 struct Component;
@@ -15,6 +25,15 @@ const OPEN_AI_URL: &str = "https://api.openai.com/v1/completions";
 impl Component {
     fn handle_msg(content: &str, room: &str) -> anyhow::Result<Option<String>> {
         let Some(config) = wit_kv::get::<_, RoomConfig>(room)? else { return Ok(None); };
+
+        match config.trigger {
+            TriggerMode::Always => {}
+            TriggerMode::Prefix => {
+                if !content.starts_with("!ai") {
+                    return Ok(None);
+                }
+            }
+        }
 
         #[derive(serde::Serialize)]
         struct Request<'a> {
@@ -68,10 +87,18 @@ impl Component {
 
     fn handle_admin(cmd: &str, room: &str) -> anyhow::Result<String> {
         if let Some(rest) = cmd.strip_prefix("enable") {
-            // Format: set-config TOKEN
-            let token = rest.trim();
+            // Format: set-config TOKEN TRIGGER_MODE
+            let Some((token, trigger)) = rest.trim().split_once(' ') else { anyhow::bail!("missing token or trigger mode"); };
+
+            let trigger = match trigger.trim() {
+                "always" => TriggerMode::Always,
+                "prefix" => TriggerMode::Prefix,
+                _ => anyhow::bail!("unknown trigger mode, available: 'always' or 'trigger'"),
+            };
+
             let config = RoomConfig {
                 token: token.to_owned(),
+                trigger,
             };
             wit_kv::set(&room, &config).context("writing to kv store")?;
             return Ok("added!".to_owned());
@@ -97,7 +124,10 @@ impl interface::Interface for Component {
         if let Some(topic) = topic {
             match topic.as_str() {
                 "admin" => r#"available admin commands:
-- enable #TOKEN
+- enable #TOKEN #TRIGGER_MODE
+    where TRIGGER_MODE is either:
+    - 'always' (the bot will answer any message in that room)
+    - 'prefix' (the bot will only handle messages starting with !ai)
 - disable"#
                     .into(),
                 _ => "i don't know this command!".into(),
