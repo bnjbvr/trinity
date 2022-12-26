@@ -1,3 +1,4 @@
+mod admin_table;
 mod room_resolver;
 mod wasm;
 
@@ -16,7 +17,6 @@ use matrix_sdk::{
     Client,
 };
 use notify::{RecursiveMode, Watcher};
-use redb::ReadableTable;
 use room_resolver::RoomResolver;
 use std::{env, path::PathBuf, sync::Arc};
 use tokio::{
@@ -24,6 +24,8 @@ use tokio::{
     time::{sleep, Duration},
 };
 use wasm::{GuestState, Module, WasmModules};
+
+use crate::admin_table::DEVICE_ID_ENTRY;
 
 /// The configuration to run a trinity instance with.
 pub struct BotConfig {
@@ -402,38 +404,6 @@ async fn on_stripped_state_member(
     }
 }
 
-const ADMIN_TABLE: redb::TableDefinition<str, [u8]> = redb::TableDefinition::new("@admin");
-
-fn read_from_admin_db(db: ShareableDatabase, key: &str) -> anyhow::Result<Option<Vec<u8>>> {
-    let txn = db.begin_read()?;
-    let table = match txn.open_table(ADMIN_TABLE) {
-        Ok(table) => table,
-        Err(err) => match err {
-            redb::Error::DatabaseAlreadyOpen
-            | redb::Error::InvalidSavepoint
-            | redb::Error::Corrupted(_)
-            | redb::Error::TableTypeMismatch(_)
-            | redb::Error::DbSizeMismatch { .. }
-            | redb::Error::TableAlreadyOpen(_, _)
-            | redb::Error::OutOfSpace
-            | redb::Error::Io(_)
-            | redb::Error::LockPoisoned(_) => Err(err)?,
-            redb::Error::TableDoesNotExist(_) => return Ok(None),
-        },
-    };
-    Ok(table.get(&key)?.map(|val| val.to_vec()))
-}
-
-fn write_in_admin_db(db: ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<()> {
-    let txn = db.begin_write()?;
-    {
-        let mut table = txn.open_table(ADMIN_TABLE)?;
-        table.insert(&key, &value)?;
-    }
-    txn.commit()?;
-    Ok(())
-}
-
 /// Run the client for the given `BotConfig`.
 pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let client = Client::builder()
@@ -450,24 +420,28 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let mut login_builder = client.login_username(&config.user_id, &config.password);
 
     let mut db_device_id = None;
-    if let Some(device_id) = read_from_admin_db(db.clone(), "device_id")? {
+    if let Some(device_id) =
+        admin_table::read(&db, DEVICE_ID_ENTRY).context("reading device_id from the database")?
+    {
+        tracing::trace!("reusing previous device_id...");
+        // the login builder keeps a reference to the previous device id string, so can't clone
+        // db_device_id here, it has to outlive the login_builder.
         db_device_id = Some(String::from_utf8(device_id)?);
         login_builder = login_builder.device_id(db_device_id.as_ref().unwrap());
     }
 
     let resp = login_builder.send().await?;
 
-    if db_device_id.as_ref() != Some(&resp.device_id.to_string()) {
-        write_in_admin_db(
-            db.clone(),
-            "device_id",
-            resp.device_id.to_string().as_bytes(),
-        )?;
+    let resp_device_id = resp.device_id.to_string();
+    if db_device_id.as_ref() != Some(&resp_device_id) {
+        tracing::trace!("storign new device_id...");
+        admin_table::write(&db, DEVICE_ID_ENTRY, resp_device_id.as_bytes())
+            .context("writing new device_id into the database")?;
     }
 
     client
         .user_id()
-        .context("missing user id for the logged in bot?")?;
+        .context("impossible state: missing user id for the logged in bot?")?;
 
     // An initial sync to set up state and so our bot doesn't respond to old
     // messages. If the `StateStore` finds saved state in the location given the
