@@ -1,3 +1,4 @@
+mod admin_table;
 mod room_resolver;
 mod wasm;
 
@@ -23,6 +24,8 @@ use tokio::{
     time::{sleep, Duration},
 };
 use wasm::{GuestState, Module, WasmModules};
+
+use crate::admin_table::DEVICE_ID_ENTRY;
 
 /// The configuration to run a trinity instance with.
 pub struct BotConfig {
@@ -89,11 +92,10 @@ impl AppCtx {
     pub fn new(
         client: Client,
         modules_path: PathBuf,
-        redb_path: String,
+        db: ShareableDatabase,
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
-        let db = Arc::new(unsafe { redb::Database::create(redb_path, 1024 * 1024)? });
-        let room_resolver = RoomResolver::new(client.clone());
+        let room_resolver = RoomResolver::new(client);
         Ok(Self {
             modules: WasmModules::new(db.clone(), &modules_path)?,
             modules_path,
@@ -410,16 +412,36 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
         .build()
         .await?;
 
+    // Create the database, and try to find a device id.
+    let db = Arc::new(unsafe { redb::Database::create(config.redb_path, 1024 * 1024)? });
+
     // First we need to log in.
     tracing::debug!("logging in...");
-    client
-        .login_username(&config.user_id, &config.password)
-        .send()
-        .await?;
+    let mut login_builder = client.login_username(&config.user_id, &config.password);
+
+    let mut db_device_id = None;
+    if let Some(device_id) =
+        admin_table::read(&db, DEVICE_ID_ENTRY).context("reading device_id from the database")?
+    {
+        tracing::trace!("reusing previous device_id...");
+        // the login builder keeps a reference to the previous device id string, so can't clone
+        // db_device_id here, it has to outlive the login_builder.
+        db_device_id = Some(String::from_utf8(device_id)?);
+        login_builder = login_builder.device_id(db_device_id.as_ref().unwrap());
+    }
+
+    let resp = login_builder.send().await?;
+
+    let resp_device_id = resp.device_id.to_string();
+    if db_device_id.as_ref() != Some(&resp_device_id) {
+        tracing::trace!("storign new device_id...");
+        admin_table::write(&db, DEVICE_ID_ENTRY, resp_device_id.as_bytes())
+            .context("writing new device_id into the database")?;
+    }
 
     client
         .user_id()
-        .context("missing user id for the logged in bot?")?;
+        .context("impossible state: missing user id for the logged in bot?")?;
 
     // An initial sync to set up state and so our bot doesn't respond to old
     // messages. If the `StateStore` finds saved state in the location given the
@@ -433,7 +455,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
         AppCtx::new(
             client_copy,
             "./modules/target/wasm32-unknown-unknown/release/".into(),
-            config.redb_path,
+            db,
             config.admin_user_id,
         )
     })
