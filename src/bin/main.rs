@@ -1,8 +1,13 @@
+use anyhow;
+use trinity::BotConfig;
+
 async fn real_main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
+    let config_path = std::env::args().nth(1);
 
     tracing::debug!("parsing config...");
-    let config = trinity::BotConfig::from_env()?;
+    // First check for a config file, then fallback to env if none found.
+    let config = BotConfig::from_config(config_path).or_else(|_| BotConfig::from_env())?;
 
     tracing::debug!("creating client...");
     trinity::run(config).await
