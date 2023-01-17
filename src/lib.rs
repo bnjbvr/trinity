@@ -22,7 +22,8 @@ use matrix_sdk::{
 };
 use notify::{RecursiveMode, Watcher};
 use room_resolver::RoomResolver;
-use std::{env, path::PathBuf, sync::Arc};
+use serde::Deserialize;
+use std::{env, fs, path::PathBuf, sync::Arc};
 use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
@@ -32,6 +33,7 @@ use wasm::{GuestState, Module, WasmModules};
 use crate::admin_table::DEVICE_ID_ENTRY;
 
 /// The configuration to run a trinity instance with.
+#[derive(Deserialize)]
 pub struct BotConfig {
     /// the matrix homeserver the bot should connect to.
     pub home_server: String,
@@ -50,6 +52,27 @@ pub struct BotConfig {
 }
 
 impl BotConfig {
+    /// Generate a `BotConfig` from a TOML config file.
+    ///
+    /// If `path` matches `None`, will search for a file called `config.toml` in an XDG
+    /// compliant configuration directory (e.g ~/.config/trinity/config.toml on Linux).
+    pub fn from_config(path: Option<String>) -> anyhow::Result<Self> {
+        let config_path = match path {
+            Some(a) => a,
+            None => {
+                let dirs = directories::ProjectDirs::from("", "", "trinity")
+                    .context("config file not found")?;
+                let path = dirs.config_dir().join("config.toml");
+                String::from(path.to_str().unwrap())
+            }
+        };
+        let contents = fs::read_to_string(&config_path)?;
+        let config: BotConfig = toml::from_str(&contents)?;
+
+        tracing::trace!("Using configuration from {config_path}");
+        Ok(config)
+    }
+
     /// Generate a `BotConfig` from the process' environment.
     pub fn from_env() -> anyhow::Result<Self> {
         // override environment variables with contents of .env file, unless they were already set
@@ -87,6 +110,7 @@ impl BotConfig {
             .collect::<anyhow::Result<Vec<_>>>()
             .context("a module path isn't valid")?;
 
+        tracing::trace!("Using configuration from environment");
         Ok(Self {
             home_server,
             user_id,
