@@ -3,6 +3,7 @@ use bindings::interface;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use shlex;
+use std::collections::HashSet;
 use textwrap_macros::dedent;
 
 use wit_log as log;
@@ -20,7 +21,7 @@ impl TryFrom<&str> for Rule {
     fn try_from(cmd: &str) -> anyhow::Result<Self, Self::Error> {
         let words = shlex::split(&cmd).unwrap_or_default();
         if words.len() != 3 {
-            return Err(String::from("Three inputs expected!"));
+            return Err(String::from("Three inputs expected: name/re/sub"));
         }
 
         Ok(Self {
@@ -33,28 +34,24 @@ impl TryFrom<&str> for Rule {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct RoomConfig {
-    enabled_rules: Vec<String>,
+    enabled_rules: HashSet<String>,
 }
 
 struct Component;
 
 impl Component {
     fn get_rules() -> Vec<Rule> {
-        if let Ok(rules) = wit_kv::get::<_, Vec<Rule>>("rules") {
-            let rules = rules.unwrap_or_default();
-            return rules;
-        }
-        vec![]
+        wit_kv::get::<_, Vec<Rule>>("rules")
+            .ok()
+            .flatten()
+            .unwrap_or_default()
     }
 
     fn get_room_config(room: &str) -> RoomConfig {
-        if let Ok(rc) = wit_kv::get::<_, RoomConfig>(&format!("room:{}", room)) {
-            let rc = rc.unwrap_or_default();
-            return rc;
-        }
-        RoomConfig {
-            enabled_rules: vec![],
-        }
+        wit_kv::get::<_, RoomConfig>(&format!("room:{}", room))
+            .ok()
+            .flatten()
+            .unwrap_or_default()
     }
 
     fn replace(msg: &str, rc: RoomConfig) -> Option<String> {
@@ -62,7 +59,11 @@ impl Component {
             .iter()
             .filter(|&r| rc.enabled_rules.contains(&r.name))
         {
-            let re = Regex::new(&rule.re).ok()?;
+            let Ok(re) = Regex::new(&rule.re) else {
+                // Shouldn't happen in theory, since the rules are validated at creation.
+                log::warn!("unexpected invalid regex in replace()");
+                continue;
+            };
             if let Some(caps) = re.captures(msg) {
                 let mut dest = String::new();
                 caps.expand(&rule.sub, &mut dest);
@@ -75,14 +76,15 @@ impl Component {
     fn handle_admin(cmd: &str, _sender: &str, room: &str) -> anyhow::Result<String> {
         // Format: new NAME RE SUB
         if let Some(input) = cmd.strip_prefix("new") {
-            let mut rules = Self::get_rules();
             let rule = match Rule::try_from(input) {
                 Ok(r) => r,
                 Err(e) => return Ok(format!("Error parsing rule: {}", e)),
             };
 
+            let mut rules = Self::get_rules();
+
             // Don't overwrite existing rules
-            if let Some(_) = rules.iter().find(|&r| r.name == rule.name) {
+            if rules.iter().any(|r| r.name == rule.name) {
                 return Ok(format!("Rule '{}' already exists!", &rule.name));
             }
 
@@ -101,8 +103,8 @@ impl Component {
             let mut split = cmd.trim().split_whitespace();
             let name = split.next().context("missing name")?;
             let mut rules = Self::get_rules();
-            if let Some(_) = rules.iter().find(|&r| r.name == name) {
-                rules.retain(|r| r.name != name);
+            if let Some(index) = rules.iter().position(|r| r.name == name) {
+                rules.remove(index);
                 let _ = wit_kv::set("rules", &rules);
                 return Ok("Rule has been deleted!".into());
             }
@@ -114,12 +116,12 @@ impl Component {
             let mut split = cmd.trim().split_whitespace();
             let name = split.next().context("missing name")?;
             let rules = Self::get_rules();
-            if let Some(_) = rules.iter().find(|&r| r.name == name) {
+            if rules.iter().any(|r| r.name == name) {
                 let mut rc = Self::get_room_config(room);
-                if rc.enabled_rules.contains(&name.to_string()) {
+                if rc.enabled_rules.contains(name) {
                     return Ok(format!("Rule '{}' is already enabled!", &name));
                 }
-                rc.enabled_rules.push(name.to_string());
+                rc.enabled_rules.insert(name.to_string());
                 let _ = wit_kv::set(&format!("room:{}", &room), &rc);
                 return Ok(format!("Rule '{}' has been enabled!", &name));
             }
@@ -131,10 +133,9 @@ impl Component {
             let mut split = cmd.trim().split_whitespace();
             let name = split.next().context("missing name")?;
             let rules = Self::get_rules();
-            if let Some(_) = rules.iter().find(|&r| r.name == name) {
+            if rules.iter().any(|r| r.name == name) {
                 let mut rc = Self::get_room_config(room);
-                if rc.enabled_rules.contains(&name.to_string()) {
-                    rc.enabled_rules.retain(|r| r != &name);
+                if rc.enabled_rules.remove(name) {
                     let _ = wit_kv::set(&format!("room:{}", &room), &rc);
                     return Ok(format!("Rule '{}' has been disabled!", &name));
                 }
@@ -145,8 +146,12 @@ impl Component {
 
         // Format: list
         if cmd == "list" {
+            let rules = Self::get_rules();
+            if rules.is_empty() {
+                return Ok("No rules found.".to_string());
+            }
             let mut msg = String::new();
-            for rule in Self::get_rules() {
+            for rule in rules {
                 msg.push_str(&format!("\n{:?}", &rule));
             }
             return Ok(msg);
