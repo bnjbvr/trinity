@@ -2,6 +2,7 @@
 members = [
     # Modules
     "./horsejs",
+    "./linkify",
     "./pun",
     "./uuid",
     "./secret",
