@@ -9,6 +9,7 @@ pub(crate) use module::messaging::Message;
 
 mod apis;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use matrix_sdk::ruma::{RoomId, UserId};
@@ -85,7 +86,11 @@ impl WasmModules {
     /// Create a new collection of wasm modules.
     ///
     /// Must be called from a blocking context.
-    pub fn new(db: ShareableDatabase, modules_paths: &[PathBuf]) -> anyhow::Result<Self> {
+    pub fn new(
+        db: ShareableDatabase,
+        modules_paths: &[PathBuf],
+        modules_config: &HashMap<String, HashMap<String, String>>,
+    ) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
 
         let mut config = wasmtime::Config::new();
@@ -142,8 +147,22 @@ impl WasmModules {
                 let (exports, instance) =
                     module::TrinityModule::instantiate(&mut store, &component, &linker)?;
 
+                // Convert the module config to Vec of tuples to satisfy wasm interface types.
+                let mc = modules_config.get(&name);
+                let mut module_config_list = Vec::new();
+                if mc.is_some() {
+                    for (key, value) in mc.unwrap().iter() {
+                        module_config_list.push((key.as_ref(), value.as_ref()))
+                    }
+                };
+
+                let mut init_config = None;
+                if module_config_list.len() > 0 {
+                    init_config = Some(module_config_list.as_slice());
+                }
+
                 tracing::debug!("calling module's init function...");
-                exports.messaging().call_init(&mut store)?;
+                exports.messaging().call_init(&mut store, init_config)?;
 
                 tracing::debug!("great success!");
                 compiled_modules.push(Module {

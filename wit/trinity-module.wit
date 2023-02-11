@@ -12,7 +12,7 @@ interface messaging {
         react(reaction)
     }
 
-    init: func()
+    init: func(config: option<list<tuple<string, string>>>)
     help: func(topic: option<string>) -> string
     admin: func(cmd: string, author-id: string, room: string) -> list<action>
     on-msg: func(content: string, author-id: string, author-name: string, room: string) -> list<action>

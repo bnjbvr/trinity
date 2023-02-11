@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use libcommand::*;
 use wit_log as log;
 use wit_sync_request;
@@ -33,7 +35,7 @@ impl Component {
 }
 
 impl TrinityCommand for Component {
-    fn init() {
+    fn init(_config: HashMap<String, String>) {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");

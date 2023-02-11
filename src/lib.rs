@@ -23,7 +23,7 @@ use matrix_sdk::{
 use notify::{RecursiveMode, Watcher};
 use room_resolver::RoomResolver;
 use serde::Deserialize;
-use std::{env, fs, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, env, fs, path::PathBuf, sync::Arc};
 use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
@@ -49,6 +49,8 @@ pub struct BotConfig {
     pub admin_user_id: OwnedUserId,
     /// paths where modules can be loaded.
     pub modules_paths: Vec<PathBuf>,
+    /// module specific configuration to forward to corresponding handler.
+    pub modules_config: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 impl BotConfig {
@@ -119,6 +121,7 @@ impl BotConfig {
             admin_user_id,
             redb_path,
             modules_paths,
+            modules_config: None,
         })
     }
 }
@@ -128,6 +131,7 @@ pub(crate) type ShareableDatabase = Arc<redb::Database>;
 struct AppCtx {
     modules: WasmModules,
     modules_paths: Vec<PathBuf>,
+    modules_config: HashMap<String, HashMap<String, String>>,
     needs_recompile: bool,
     admin_user_id: OwnedUserId,
     db: ShareableDatabase,
@@ -141,13 +145,15 @@ impl AppCtx {
     pub fn new(
         client: Client,
         modules_paths: Vec<PathBuf>,
+        modules_config: HashMap<String, HashMap<String, String>>,
         db: ShareableDatabase,
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
         let room_resolver = RoomResolver::new(client);
         Ok(Self {
-            modules: WasmModules::new(db.clone(), &modules_paths)?,
+            modules: WasmModules::new(db.clone(), &modules_paths, &modules_config)?,
             modules_paths,
+            modules_config,
             needs_recompile: false,
             admin_user_id,
             db,
@@ -170,7 +176,7 @@ impl AppCtx {
                 ptr.lock().await
             });
 
-            match WasmModules::new(ptr.db.clone(), &ptr.modules_paths) {
+            match WasmModules::new(ptr.db.clone(), &ptr.modules_paths, &ptr.modules_config) {
                 Ok(modules) => {
                     ptr.modules = modules;
                     tracing::info!("successful hot reload!");
@@ -528,6 +534,8 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
             .context("writing new device_id into the database")?;
     }
 
+    let modules_config = config.modules_config.unwrap_or(HashMap::new());
+
     client
         .user_id()
         .context("impossible state: missing user id for the logged in bot?")?;
@@ -541,7 +549,13 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     tracing::debug!("setting up app...");
     let client_copy = client.clone();
     let app_ctx = tokio::task::spawn_blocking(|| {
-        AppCtx::new(client_copy, config.modules_paths, db, config.admin_user_id)
+        AppCtx::new(
+            client_copy,
+            config.modules_paths,
+            modules_config,
+            db,
+            config.admin_user_id,
+        )
     })
     .await??;
     let app = App::new(app_ctx);
