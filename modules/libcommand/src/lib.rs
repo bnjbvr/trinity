@@ -10,11 +10,15 @@
 //! - Because of that, I've had to put most of the code, including the whole `impl Interface for X`
 //! block, in the macro body. It's ugly and not practical for maintainability purposes.
 
+use std::collections::HashMap;
+
 /// Implements a command for a given type, assuming the type implements the `TrinityCommand` trait.
 #[macro_export]
 macro_rules! impl_command {
     ($ident:ident) => {
         const _: () = {
+            use std::collections::HashMap;
+
             fn consume_client(client: $crate::CommandClient) -> Vec<bindings::messaging::Action> {
                 let mut actions = Vec::new();
 
@@ -37,8 +41,17 @@ macro_rules! impl_command {
             }
 
             impl bindings::messaging::Messaging for $ident {
-                fn init() {
-                    <Self as $crate::TrinityCommand>::init();
+                fn init(config: Option<Vec<(String, String)>>) {
+                    // Convert the Vec of tuples to a HashMap for convenience.
+                    let config = match config {
+                        Some(cfg) => cfg
+                            .iter()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
+                        None => HashMap::new(),
+                    };
+
+                    <Self as $crate::TrinityCommand>::init(config);
                 }
 
                 fn help(topic: Option<String>) -> String {
@@ -124,7 +137,7 @@ pub trait TrinityCommand {
     /// Code that will be called once during initialization of the command. This is a good time to
     /// retrieve settings from the database and cache them locally, if needs be, or run any
     /// initialization code that shouldn't run on every message later.
-    fn init() {}
+    fn init(_client: HashMap<String, String>) {}
 
     /// Handle a message received in a room where the bot is present.
     ///

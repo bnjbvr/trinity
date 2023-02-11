@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Context as _;
 use libcommand::{impl_command, CommandClient, TrinityCommand};
 use wit_log as log;
@@ -115,7 +117,7 @@ impl Component {
 }
 
 impl TrinityCommand for Component {
-    fn init() {
+    fn init(_config: HashMap<String, String>) {
         let _ = log::set_boxed_logger(Box::new(crate::log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
     }
