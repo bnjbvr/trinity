@@ -77,6 +77,24 @@ ideas, please go ahead :)
 - ask what's the weather in some city, is it going to rain in the next hour, etc.
 - YOUR BILLION DOLLARS IDEA HERE
 
+## Deploy with Docker
+
+First, build the Docker image:
+
+```
+docker build -t bnjbvr/trinity .
+```
+
+Then start it with the right environment variables (see also `.env.example`):
+
+```
+docker run -e HOMESERVER="matrix.example.com" \
+    -e BOT_USER_ID="@trinity:example.com" \
+    -e BOT_PWD="hunter2" \
+    -e ADMIN_USER_ID="@admin:example.com" \
+    bnjbvr/trinity
+```
+
 ## Is it any good?
 
 Yes.
