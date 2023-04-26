@@ -1,3 +1,4 @@
 target/
 .env
+trinity.db
 cache/

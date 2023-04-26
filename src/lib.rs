@@ -41,6 +41,8 @@ pub struct BotConfig {
     pub redb_path: String,
     /// the admin user id for the bot.
     pub admin_user_id: OwnedUserId,
+    /// paths where modules can be loaded.
+    pub modules_paths: Vec<PathBuf>,
 }
 
 impl BotConfig {
@@ -63,6 +65,24 @@ impl BotConfig {
             .try_into()
             .context("impossible to parse admin user id")?;
 
+        // Read the module paths (separated by commas), check they exist, and return the whole
+        // list.
+        let modules_paths = env::var("MODULES_PATHS")
+            .as_deref()
+            .unwrap_or("./modules/target/wasm32-unknown-unknown/release")
+            .split(',')
+            .map(|path| {
+                let path = PathBuf::from(path);
+                anyhow::ensure!(
+                    path.exists(),
+                    "{} doesn't reference a valid path",
+                    path.to_string_lossy()
+                );
+                Ok(path)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .context("a module path isn't valid")?;
+
         Ok(Self {
             home_server,
             user_id,
@@ -70,6 +90,7 @@ impl BotConfig {
             matrix_store_path,
             admin_user_id,
             redb_path,
+            modules_paths,
         })
     }
 }
@@ -78,7 +99,7 @@ pub(crate) type ShareableDatabase = Arc<redb::Database>;
 
 struct AppCtx {
     modules: WasmModules,
-    modules_path: PathBuf,
+    modules_paths: Vec<PathBuf>,
     needs_recompile: bool,
     admin_user_id: OwnedUserId,
     db: ShareableDatabase,
@@ -91,14 +112,14 @@ impl AppCtx {
     /// Must be called from a blocking context.
     pub fn new(
         client: Client,
-        modules_path: PathBuf,
+        modules_paths: Vec<PathBuf>,
         db: ShareableDatabase,
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
         let room_resolver = RoomResolver::new(client);
         Ok(Self {
-            modules: WasmModules::new(db.clone(), &modules_path)?,
-            modules_path,
+            modules: WasmModules::new(db.clone(), &modules_paths)?,
+            modules_paths,
             needs_recompile: false,
             admin_user_id,
             db,
@@ -121,7 +142,7 @@ impl AppCtx {
                 ptr.lock().await
             });
 
-            match WasmModules::new(ptr.db.clone(), &ptr.modules_path) {
+            match WasmModules::new(ptr.db.clone(), &ptr.modules_paths) {
                 Ok(modules) => {
                     ptr.modules = modules;
                     tracing::info!("successful hot reload!");
@@ -452,12 +473,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     tracing::debug!("setting up app...");
     let client_copy = client.clone();
     let app_ctx = tokio::task::spawn_blocking(|| {
-        AppCtx::new(
-            client_copy,
-            "./modules/target/wasm32-unknown-unknown/release/".into(),
-            db,
-            config.admin_user_id,
-        )
+        AppCtx::new(client_copy, config.modules_paths, db, config.admin_user_id)
     })
     .await??;
     let app = App::new(app_ctx);
@@ -476,48 +492,55 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn watcher(app: Arc<Mutex<AppCtx>>) -> anyhow::Result<notify::RecommendedWatcher> {
-    let modules_path = app.lock().await.modules_path.to_owned();
-    tracing::debug!(
-        "setting up watcher on @ {}...",
-        modules_path.to_string_lossy()
-    );
+async fn watcher(app: Arc<Mutex<AppCtx>>) -> anyhow::Result<Vec<notify::RecommendedWatcher>> {
+    let modules_paths = { app.lock().await.modules_paths.clone() };
 
-    let rt_handle = tokio::runtime::Handle::current();
-    let mut watcher =
-        notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| match res {
-            Ok(event) => {
-                // Only watch wasm files
-                if !event.paths.iter().any(|path| {
-                    if let Some(ext) = path.extension() {
-                        ext == "wasm"
-                    } else {
-                        false
+    let mut watchers = Vec::with_capacity(modules_paths.len());
+    for modules_path in modules_paths {
+        tracing::debug!(
+            "setting up watcher on @ {}...",
+            modules_path.to_string_lossy()
+        );
+
+        let rt_handle = tokio::runtime::Handle::current();
+        let app = app.clone();
+        let mut watcher = notify::recommended_watcher(
+            move |res: Result<notify::Event, notify::Error>| match res {
+                Ok(event) => {
+                    // Only watch wasm files
+                    if !event.paths.iter().any(|path| {
+                        if let Some(ext) = path.extension() {
+                            ext == "wasm"
+                        } else {
+                            false
+                        }
+                    }) {
+                        return;
                     }
-                }) {
-                    return;
-                }
 
-                match event.kind {
-                    notify::EventKind::Create(_)
-                    | notify::EventKind::Modify(_)
-                    | notify::EventKind::Remove(_) => {
-                        // Trigger an update of the modules.
-                        let app = app.clone();
-                        rt_handle.spawn(async move {
-                            AppCtx::set_needs_recompile(app).await;
-                        });
+                    match event.kind {
+                        notify::EventKind::Create(_)
+                        | notify::EventKind::Modify(_)
+                        | notify::EventKind::Remove(_) => {
+                            // Trigger an update of the modules.
+                            let app = app.clone();
+                            rt_handle.spawn(async move {
+                                AppCtx::set_needs_recompile(app).await;
+                            });
+                        }
+                        notify::EventKind::Access(_)
+                        | notify::EventKind::Any
+                        | notify::EventKind::Other => {}
                     }
-                    notify::EventKind::Access(_)
-                    | notify::EventKind::Any
-                    | notify::EventKind::Other => {}
                 }
-            }
-            Err(e) => tracing::warn!("watch error: {e:?}"),
-        })?;
+                Err(e) => tracing::warn!("watch error: {e:?}"),
+            },
+        )?;
 
-    watcher.watch(&modules_path, RecursiveMode::Recursive)?;
+        watcher.watch(&modules_path, RecursiveMode::Recursive)?;
+        watchers.push(watcher);
+    }
 
     tracing::debug!("watcher setup done!");
-    Ok(watcher)
+    Ok(watchers)
 }
