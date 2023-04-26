@@ -7,7 +7,7 @@ mod module {
 
 mod apis;
 
-use std::path::Path;
+use std::path::PathBuf;
 
 use matrix_sdk::ruma::{RoomId, UserId};
 use wasmtime::AsContextMut;
@@ -81,7 +81,7 @@ impl WasmModules {
     /// Create a new collection of wasm modules.
     ///
     /// Must be called from a blocking context.
-    pub fn new(db: ShareableDatabase, modules_path: &Path) -> anyhow::Result<Self> {
+    pub fn new(db: ShareableDatabase, modules_paths: &[PathBuf]) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
 
         let mut config = wasmtime::Config::new();
@@ -95,53 +95,59 @@ impl WasmModules {
 
         let mut store = wasmtime::Store::new(&engine, state);
 
-        tracing::debug!("precompiling wasm modules from {modules_path:?}...");
-        for module_path in std::fs::read_dir(modules_path)? {
-            let module_path = module_path?.path();
-
-            if module_path.extension().map_or(true, |ext| ext != "wasm") {
-                continue;
-            }
-
-            let name = module_path
-                .file_stem()
-                .map(|s| s.to_string_lossy())
-                .unwrap_or_else(|| module_path.to_string_lossy())
-                .to_string();
-
-            tracing::debug!("creating APIs...");
-            let module_state = ModuleState {
-                apis: Apis::new(name.clone(), db.clone())?,
-            };
-
-            let entry = store.data_mut().imports.len();
-            store.data_mut().imports.push(module_state);
-
-            let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
-
-            apis::Apis::link(entry, &mut linker)?;
-
+        tracing::debug!("precompiling wasm modules...");
+        for modules_path in modules_paths {
             tracing::debug!(
-                "compiling wasm module: {name} @ {}...",
-                module_path.to_string_lossy()
+                "looking for modules in {}...",
+                modules_path.to_string_lossy()
             );
+            for module_path in std::fs::read_dir(modules_path)? {
+                let module_path = module_path?.path();
 
-            let component = wasmtime::component::Component::from_file(&engine, &module_path)?;
+                if module_path.extension().map_or(true, |ext| ext != "wasm") {
+                    continue;
+                }
 
-            tracing::debug!("instantiating wasm component: {name}...");
+                let name = module_path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy())
+                    .unwrap_or_else(|| module_path.to_string_lossy())
+                    .to_string();
 
-            let (exports, instance) =
-                module::Interface::instantiate(&mut store, &component, &mut linker)?;
+                tracing::debug!("creating APIs...");
+                let module_state = ModuleState {
+                    apis: Apis::new(name.clone(), db.clone())?,
+                };
 
-            tracing::debug!("calling module's init function...");
-            exports.init(&mut store)?;
+                let entry = store.data_mut().imports.len();
+                store.data_mut().imports.push(module_state);
 
-            tracing::debug!("great success!");
-            compiled_modules.push(Module {
-                name,
-                exports,
-                _instance: instance,
-            });
+                let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
+
+                apis::Apis::link(entry, &mut linker)?;
+
+                tracing::debug!(
+                    "compiling wasm module: {name} @ {}...",
+                    module_path.to_string_lossy()
+                );
+
+                let component = wasmtime::component::Component::from_file(&engine, &module_path)?;
+
+                tracing::debug!("instantiating wasm component: {name}...");
+
+                let (exports, instance) =
+                    module::Interface::instantiate(&mut store, &component, &mut linker)?;
+
+                tracing::debug!("calling module's init function...");
+                exports.init(&mut store)?;
+
+                tracing::debug!("great success!");
+                compiled_modules.push(Module {
+                    name,
+                    exports,
+                    _instance: instance,
+                });
+            }
         }
 
         Ok(Self {
