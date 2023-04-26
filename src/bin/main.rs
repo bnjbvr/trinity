@@ -1,6 +1,3 @@
-use anyhow;
-use trinity;
-
 async fn real_main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
