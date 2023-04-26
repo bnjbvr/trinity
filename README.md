@@ -92,8 +92,12 @@ docker run -e HOMESERVER="matrix.example.com" \
     -e BOT_USER_ID="@trinity:example.com" \
     -e BOT_PWD="hunter2" \
     -e ADMIN_USER_ID="@admin:example.com" \
+    -v /host/path/to/data/directory:/opt/trinity/data
     bnjbvr/trinity
 ```
+
+Data is saved in the `/opt/trinity/data` directory, and it is recommended to make it a volume so as
+to be able to decrypt messages over multiple sessions and so on.
 
 ## Is it any good?
 
