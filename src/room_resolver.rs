@@ -20,7 +20,7 @@ impl RoomResolver {
     }
 
     pub fn resolve_room(&mut self, room: &str) -> anyhow::Result<Option<String>> {
-        if !room.starts_with("#") && !room.starts_with("!") {
+        if !room.starts_with('#') && !room.starts_with('!') {
             // This is likely not meant to be a room.
             return Ok(None);
         }

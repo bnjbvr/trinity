@@ -136,7 +136,7 @@ impl WasmModules {
                 tracing::debug!("instantiating wasm component: {name}...");
 
                 let (exports, instance) =
-                    module::Interface::instantiate(&mut store, &component, &mut linker)?;
+                    module::Interface::instantiate(&mut store, &component, &linker)?;
 
                 tracing::debug!("calling module's init function...");
                 exports.init(&mut store)?;

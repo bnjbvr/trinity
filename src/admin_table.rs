@@ -28,7 +28,7 @@ pub fn read(db: &ShareableDatabase, key: &str) -> anyhow::Result<Option<Vec<u8>>
             redb::Error::TableDoesNotExist(_) => return Ok(None),
         },
     };
-    Ok(table.get(&key)?.map(|val| val.to_vec()))
+    Ok(table.get(key)?.map(|val| val.to_vec()))
 }
 
 /// Writes a given key in the admin table from the database.
@@ -36,7 +36,7 @@ pub fn write(db: &ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<
     let txn = db.begin_write()?;
     {
         let mut table = txn.open_table(ADMIN_TABLE)?;
-        table.insert(&key, &value)?;
+        table.insert(key, value)?;
     }
     txn.commit()?;
     Ok(())

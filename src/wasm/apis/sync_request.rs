@@ -34,7 +34,7 @@ impl sync_request::SyncRequest for SyncRequestApi {
             builder = builder.header(header.key, header.value);
         }
         if let Some(body) = req.body {
-            builder = builder.body(body.to_owned());
+            builder = builder.body(body);
         }
         let req = builder.build()?;
 

@@ -182,14 +182,14 @@ fn try_handle_admin<'a>(
     tracing::trace!("trying admin for {content}");
     if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
-        if let Some((module, rest)) = rest.split_once(" ").map(|(l, r)| (l, r.trim())) {
+        if let Some((module, rest)) = rest.split_once(' ').map(|(l, r)| (l, r.trim())) {
             // If the next word resolves to a valid room id use that, otherwise use the
             // current room.
             let (possible_room, rest) = rest
-                .split_once(" ")
+                .split_once(' ')
                 .map_or((rest, ""), |(l, r)| (l, r.trim()));
 
-            let (target_room, rest) = match room_resolver.resolve_room(&possible_room) {
+            let (target_room, rest) = match room_resolver.resolve_room(possible_room) {
                 Ok(Some(resolved_room)) => (resolved_room, rest.to_string()),
                 Ok(None) | Err(_) => (room.to_string(), format!("{} {}", possible_room, rest)),
             };
@@ -251,13 +251,13 @@ fn try_handle_help<'a>(
     } else if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
         let (module, topic) = rest
-            .split_once(" ")
+            .split_once(' ')
             .map(|(l, r)| (l, Some(r.trim())))
             .unwrap_or((rest, None));
         let mut found = None;
         for m in modules {
             if m.name() == module {
-                found = m.help(&mut *store, topic.as_deref()).ok();
+                found = m.help(&mut *store, topic).ok();
                 break;
             }
         }
@@ -321,7 +321,7 @@ async fn on_message(
 
             let (store, modules) = ctx.modules.iter();
 
-            if ev.sender() == &ctx.admin_user_id {
+            if ev.sender() == ctx.admin_user_id {
                 if let Some(admin_messages) = try_handle_admin(
                     &content,
                     &ctx.admin_user_id,
@@ -333,7 +333,7 @@ async fn on_message(
                     tracing::trace!("handled by admin, skipping modules");
                     return admin_messages
                         .into_iter()
-                        .map(|msg| RoomMessageEventContent::text_plain(msg))
+                        .map(RoomMessageEventContent::text_plain)
                         .collect();
                 }
             }
