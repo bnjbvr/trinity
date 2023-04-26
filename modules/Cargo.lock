@@ -242,6 +242,7 @@ dependencies = [
 name = "pun"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "pun-bindings",
  "serde",
  "serde_json",

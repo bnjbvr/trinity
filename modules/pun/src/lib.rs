@@ -33,20 +33,81 @@ impl Component {
     }
 }
 
-impl interface::Interface for Component {
+// TODO experiment further with that
+enum Msg<'a> {
+    Admin { command: &'a str },
+    Help { topic: Option<&'a str> },
+    Message { content: &'a str },
+}
+
+struct MsgMetadata {
+    is_help: bool,
+    is_admin: bool,
+}
+
+#[derive(Default)]
+struct Messenger {
+    msg: Option<String>,
+}
+
+impl Messenger {
+    fn respond(&mut self, msg: String) -> anyhow::Result<()> {
+        let prev = self.msg.replace(msg);
+        anyhow::ensure!(
+            prev.is_none(),
+            "already set a message, multiple messages NYI"
+        );
+        Ok(())
+    }
+}
+
+trait TrinityCommand {
+    fn init() {}
+    fn on_msg(client: &mut Messenger, content: &str, metadata: MsgMetadata);
+}
+
+impl TrinityCommand for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help(topic: Option<String>) -> String {
-        if let Some(topic) = topic {
-            if topic == "toxic" {
-                return "this is content fetched from a website on the internet, so this may be toxic!".to_owned();
+    fn on_msg(client: &mut Messenger, content: &str, metadata: MsgMetadata) {
+        if metadata.is_help {
+            if let Some(topic) = content {
+                if topic == "toxic" {
+                    client.respond("this is content fetched from a website on the internet, so this may be toxic!".to_owned());
+                }
             }
+            client.respond("Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned());
+        } else if metadata.is_admin {
+            client.respond("I don't have any admin commands".to_owned());
+        } else if let Some(content) = Self::get_pun(content) {
+            client.respond(content);
         }
-        "Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned()
+    }
+}
+
+impl<T> interface::Interface for T where T: TrinityCommand
+{
+    fn init() {
+        <Self as TrinityCommand>::init();
+    }
+
+    fn help(topic: Option<String>) -> String {
+        let mut client = Messenger::default();
+        <Self as TrinityCommand>::on_msg(
+            &mut client,
+            topic.as_ref().unwrap_or(""),
+            MsgMetadata {
+                is_help: true,
+                is_admin: false,
+            },
+        );
+        client
+            .msg
+            .unwrap_or_else(|| String::from("<no help specified by the module>"))
     }
 
     fn on_msg(
@@ -55,9 +116,18 @@ impl interface::Interface for Component {
         _author_name: String,
         _room: String,
     ) -> Vec<interface::Message> {
-        if let Some(content) = Self::get_pun(&content) {
+        let mut client = Messenger::default();
+        <Self as TrinityCommand>::on_msg(
+            &mut client,
+            &content,
+            MsgMetadata {
+                is_help: false,
+                is_admin: false,
+            },
+        );
+        if let Some(response) = client.msg {
             vec![interface::Message {
-                content,
+                content: response,
                 to: author_id,
             }]
         } else {
@@ -65,8 +135,24 @@ impl interface::Interface for Component {
         }
     }
 
-    fn admin(_cmd: String, _author: String, _room: String) -> Vec<interface::Message> {
-        Vec::new()
+    fn admin(cmd: String, author: String, _room: String) -> Vec<interface::Message> {
+        let mut client = Messenger::default();
+        <Self as TrinityCommand>::on_msg(
+            &mut client,
+            &cmd,
+            MsgMetadata {
+                is_help: false,
+                is_admin: true,
+            },
+        );
+        if let Some(response) = client.msg {
+            vec![interface::Message {
+                content: response,
+                to: author,
+            }]
+        } else {
+            vec![]
+        }
     }
 }
 
