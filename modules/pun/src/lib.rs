@@ -3,6 +3,14 @@ use bindings::interface;
 use wit_log as log;
 use wit_sync_request;
 
+// TODO move to high-level library
+macro_rules! impl_command {
+    ($ident:ident) => {
+        type Wrapped = TrinityCommandWrapper<Component>;
+        bindings::export!(Wrapped);
+    };
+}
+
 struct Component;
 
 impl Component {
@@ -33,16 +41,53 @@ impl Component {
     }
 }
 
-// TODO experiment further with that
-enum Msg<'a> {
-    Admin { command: &'a str },
-    Help { topic: Option<&'a str> },
-    Message { content: &'a str },
+impl TrinityCommand for Component {
+    fn init() {
+        let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
+        log::set_max_level(log::LevelFilter::Trace);
+        log::trace!("Called the init() method \\o/");
+    }
+
+    fn on_msg(client: &mut Messenger, msg: Msg<'_>) -> anyhow::Result<()> {
+        match msg {
+            Msg::Admin { command: _ } => {
+                client.respond("I don't have any admin commands".to_owned())?;
+            }
+            Msg::Help { topic } => {
+                if topic == Some("toxic") {
+                    client.respond(
+                    "this is content fetched from a website on the internet, so this may be toxic!"
+                        .to_owned(),
+                )?;
+                } else {
+                    client.respond("Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned())?;
+                }
+            }
+            Msg::Message { content } => {
+                if let Some(content) = Self::get_pun(content) {
+                    client.respond(content)?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
-struct MsgMetadata {
-    is_help: bool,
-    is_admin: bool,
+impl_command!(Component);
+
+// FRAMEWORK BITS, TODO move out to a shared library
+
+enum Msg<'a> {
+    #[allow(unused)]
+    Admin {
+        command: &'a str,
+    },
+    Help {
+        topic: Option<&'a str>,
+    },
+    Message {
+        content: &'a str,
+    },
 }
 
 #[derive(Default)]
@@ -63,51 +108,36 @@ impl Messenger {
 
 trait TrinityCommand {
     fn init() {}
-    fn on_msg(client: &mut Messenger, content: &str, metadata: MsgMetadata);
+    fn on_msg(client: &mut Messenger, content: Msg<'_>) -> anyhow::Result<()>;
 }
 
-impl TrinityCommand for Component {
-    fn init() {
-        let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
-        log::set_max_level(log::LevelFilter::Trace);
-        log::trace!("Called the init() method \\o/");
-    }
-
-    fn on_msg(client: &mut Messenger, content: &str, metadata: MsgMetadata) {
-        if metadata.is_help {
-            if let Some(topic) = content {
-                if topic == "toxic" {
-                    client.respond("this is content fetched from a website on the internet, so this may be toxic!".to_owned());
-                }
-            }
-            client.respond("Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned());
-        } else if metadata.is_admin {
-            client.respond("I don't have any admin commands".to_owned());
-        } else if let Some(content) = Self::get_pun(content) {
-            client.respond(content);
-        }
-    }
+/// Small wrapper which sole purpose is to work around the impossibility to have `impl Interface
+/// for T where T: TrinityCommand`.
+struct TrinityCommandWrapper<T> {
+    _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T> interface::Interface for T where T: TrinityCommand
+impl<T> interface::Interface for TrinityCommandWrapper<T>
+where
+    T: TrinityCommand,
 {
     fn init() {
-        <Self as TrinityCommand>::init();
+        <T as TrinityCommand>::init();
     }
 
     fn help(topic: Option<String>) -> String {
         let mut client = Messenger::default();
-        <Self as TrinityCommand>::on_msg(
+        match <T as TrinityCommand>::on_msg(
             &mut client,
-            topic.as_ref().unwrap_or(""),
-            MsgMetadata {
-                is_help: true,
-                is_admin: false,
+            Msg::Help {
+                topic: topic.as_deref(),
             },
-        );
-        client
-            .msg
-            .unwrap_or_else(|| String::from("<no help specified by the module>"))
+        ) {
+            Ok(()) => client
+                .msg
+                .unwrap_or_else(|| String::from("<no help specified by the module>")),
+            Err(err) => format!("<error when handling help from module: {err:#}>"),
+        }
     }
 
     fn on_msg(
@@ -117,43 +147,45 @@ impl<T> interface::Interface for T where T: TrinityCommand
         _room: String,
     ) -> Vec<interface::Message> {
         let mut client = Messenger::default();
-        <Self as TrinityCommand>::on_msg(
-            &mut client,
-            &content,
-            MsgMetadata {
-                is_help: false,
-                is_admin: false,
-            },
-        );
-        if let Some(response) = client.msg {
-            vec![interface::Message {
-                content: response,
-                to: author_id,
-            }]
-        } else {
-            vec![]
+        match <T as TrinityCommand>::on_msg(&mut client, Msg::Message { content: &content }) {
+            Ok(()) => {
+                if let Some(response) = client.msg {
+                    vec![interface::Message {
+                        content: response,
+                        to: author_id,
+                    }]
+                } else {
+                    vec![]
+                }
+            }
+            Err(err) => {
+                vec![interface::Message {
+                    content: format!("<error when handling message from module: {err:#}>"),
+                    to: author_id,
+                }]
+            }
         }
     }
 
-    fn admin(cmd: String, author: String, _room: String) -> Vec<interface::Message> {
+    fn admin(cmd: String, author_id: String, _room: String) -> Vec<interface::Message> {
         let mut client = Messenger::default();
-        <Self as TrinityCommand>::on_msg(
-            &mut client,
-            &cmd,
-            MsgMetadata {
-                is_help: false,
-                is_admin: true,
-            },
-        );
-        if let Some(response) = client.msg {
-            vec![interface::Message {
-                content: response,
-                to: author,
-            }]
-        } else {
-            vec![]
+        match <T as TrinityCommand>::on_msg(&mut client, Msg::Admin { command: &cmd }) {
+            Ok(()) => {
+                if let Some(response) = client.msg {
+                    vec![interface::Message {
+                        content: response,
+                        to: author_id,
+                    }]
+                } else {
+                    vec![]
+                }
+            }
+            Err(err) => {
+                vec![interface::Message {
+                    content: format!("<error when handling admin from module: {err:#}>"),
+                    to: author_id,
+                }]
+            }
         }
     }
 }
-
-bindings::export!(Component);
