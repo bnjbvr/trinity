@@ -48,28 +48,27 @@ impl TrinityCommand for Component {
         log::trace!("Called the init() method \\o/");
     }
 
-    fn on_msg(client: &mut Messenger, msg: Msg<'_>) -> anyhow::Result<()> {
+    fn on_msg(client: &mut CommandClient, msg: Message<'_>) {
         match msg {
-            Msg::Admin { command: _ } => {
-                client.respond("I don't have any admin commands".to_owned())?;
+            Message::Admin { command: _ } => {
+                client.respond("I don't have any admin commands".to_owned());
             }
-            Msg::Help { topic } => {
+            Message::Help { topic } => {
                 if topic == Some("toxic") {
                     client.respond(
-                    "this is content fetched from a website on the internet, so this may be toxic!"
-                        .to_owned(),
-                )?;
+                        "this is content fetched from a website on the internet, so this may be toxic!"
+                            .to_owned(),
+                    );
                 } else {
-                    client.respond("Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned())?;
+                    client.respond("Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned());
                 }
             }
-            Msg::Message { content } => {
+            Message::Message { content } => {
                 if let Some(content) = Self::get_pun(content) {
-                    client.respond(content)?;
+                    client.respond(content);
                 }
             }
         }
-        Ok(())
     }
 }
 
@@ -77,7 +76,7 @@ impl_command!(Component);
 
 // FRAMEWORK BITS, TODO move out to a shared library
 
-enum Msg<'a> {
+enum Message<'a> {
     #[allow(unused)]
     Admin {
         command: &'a str,
@@ -91,24 +90,20 @@ enum Msg<'a> {
 }
 
 #[derive(Default)]
-struct Messenger {
-    msg: Option<String>,
+struct CommandClient {
+    messages: Vec<String>,
 }
 
-impl Messenger {
-    fn respond(&mut self, msg: String) -> anyhow::Result<()> {
-        let prev = self.msg.replace(msg);
-        anyhow::ensure!(
-            prev.is_none(),
-            "already set a message, multiple messages NYI"
-        );
-        Ok(())
+impl CommandClient {
+    /// Queues a message to be sent to someone.
+    pub fn respond(&mut self, msg: String) {
+        self.messages.push(msg);
     }
 }
 
 trait TrinityCommand {
     fn init() {}
-    fn on_msg(client: &mut Messenger, content: Msg<'_>) -> anyhow::Result<()>;
+    fn on_msg(client: &mut CommandClient, content: Message<'_>);
 }
 
 /// Small wrapper which sole purpose is to work around the impossibility to have `impl Interface
@@ -126,17 +121,18 @@ where
     }
 
     fn help(topic: Option<String>) -> String {
-        let mut client = Messenger::default();
-        match <T as TrinityCommand>::on_msg(
+        let mut client = CommandClient::default();
+        <T as TrinityCommand>::on_msg(
             &mut client,
-            Msg::Help {
+            Message::Help {
                 topic: topic.as_deref(),
             },
-        ) {
-            Ok(()) => client
-                .msg
-                .unwrap_or_else(|| String::from("<no help specified by the module>")),
-            Err(err) => format!("<error when handling help from module: {err:#}>"),
+        );
+        if !client.messages.is_empty() {
+            // TODO how to make it clear that only one message can be sent?
+            client.messages.remove(0)
+        } else {
+            String::from("<no help specified by the module>")
         }
     }
 
@@ -146,46 +142,28 @@ where
         _author_name: String,
         _room: String,
     ) -> Vec<interface::Message> {
-        let mut client = Messenger::default();
-        match <T as TrinityCommand>::on_msg(&mut client, Msg::Message { content: &content }) {
-            Ok(()) => {
-                if let Some(response) = client.msg {
-                    vec![interface::Message {
-                        content: response,
-                        to: author_id,
-                    }]
-                } else {
-                    vec![]
-                }
-            }
-            Err(err) => {
-                vec![interface::Message {
-                    content: format!("<error when handling message from module: {err:#}>"),
-                    to: author_id,
-                }]
-            }
-        }
+        let mut client = CommandClient::default();
+        <T as TrinityCommand>::on_msg(&mut client, Message::Message { content: &content });
+        client
+            .messages
+            .into_iter()
+            .map(|msg| interface::Message {
+                content: msg,
+                to: author_id.clone(),
+            })
+            .collect()
     }
 
     fn admin(cmd: String, author_id: String, _room: String) -> Vec<interface::Message> {
-        let mut client = Messenger::default();
-        match <T as TrinityCommand>::on_msg(&mut client, Msg::Admin { command: &cmd }) {
-            Ok(()) => {
-                if let Some(response) = client.msg {
-                    vec![interface::Message {
-                        content: response,
-                        to: author_id,
-                    }]
-                } else {
-                    vec![]
-                }
-            }
-            Err(err) => {
-                vec![interface::Message {
-                    content: format!("<error when handling admin from module: {err:#}>"),
-                    to: author_id,
-                }]
-            }
-        }
+        let mut client = CommandClient::default();
+        <T as TrinityCommand>::on_msg(&mut client, Message::Admin { command: &cmd });
+        client
+            .messages
+            .into_iter()
+            .map(|msg| interface::Message {
+                content: msg,
+                to: author_id.clone(),
+            })
+            .collect()
     }
 }
