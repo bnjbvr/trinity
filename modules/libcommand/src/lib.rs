@@ -53,7 +53,11 @@ macro_rules! impl_command {
                         .collect()
                 }
 
-                fn admin(cmd: String, author_id: String, room: String) -> Vec<bindings::interface::Message> {
+                fn admin(
+                    cmd: String,
+                    author_id: String,
+                    room: String,
+                ) -> Vec<bindings::interface::Message> {
                     let mut client = CommandClient::default();
                     <T as TrinityCommand>::on_admin(&mut client, &cmd, &room);
                     client
