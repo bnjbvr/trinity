@@ -128,6 +128,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "201de327520df007757c1f0adce6e827fe8562fbc28bfd9c15571c66ca1f5f79"
 
 [[package]]
+name = "libcommand"
+version = "0.1.0"
+
+[[package]]
 name = "linkify"
 version = "0.1.0"
 dependencies = [
@@ -242,6 +246,7 @@ dependencies = [
 name = "pun"
 version = "0.1.0"
 dependencies = [
+ "libcommand",
  "pun-bindings",
  "serde",
  "serde_json",

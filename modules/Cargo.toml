@@ -10,6 +10,7 @@ members = [
     "./openai",
 
     # Libs
+    "./libcommand",
     "./wit-log",
     "./wit-sync-request",
     "./wit-sys",
@@ -17,6 +18,7 @@ members = [
 ]
 
 [workspace.dependencies]
+libcommand = { path = "./libcommand" }
 wit-bindgen-guest-rust = { git = "https://github.com/bytecodealliance/wit-bindgen" }
 wit-log = { path = "./wit-log" }
 wit-sys = { path = "./wit-sys" }

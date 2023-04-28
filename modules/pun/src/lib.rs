@@ -1,5 +1,4 @@
-use bindings::interface;
-
+use libcommand::*;
 use wit_log as log;
 use wit_sync_request;
 
@@ -33,41 +32,26 @@ impl Component {
     }
 }
 
-impl interface::Interface for Component {
+impl TrinityCommand for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help(topic: Option<String>) -> String {
-        if let Some(topic) = topic {
-            if topic == "toxic" {
-                return "this is content fetched from a website on the internet, so this may be toxic!".to_owned();
-            }
+    fn on_msg(client: &mut CommandClient, msg: &str) {
+        if let Some(content) = Self::get_pun(msg) {
+            client.respond(content);
         }
-        "Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)".to_owned()
     }
 
-    fn on_msg(
-        content: String,
-        author_id: String,
-        _author_name: String,
-        _room: String,
-    ) -> Vec<interface::Message> {
-        if let Some(content) = Self::get_pun(&content) {
-            vec![interface::Message {
-                content,
-                to: author_id,
-            }]
+    fn on_help(topic: Option<&str>) -> String {
+        if topic == Some("toxic") {
+            "this is content fetched from a website on the internet, so this may be toxic!"
         } else {
-            vec![]
-        }
-    }
-
-    fn admin(_cmd: String, _author: String, _room: String) -> Vec<interface::Message> {
-        Vec::new()
+            "Get radioactive puns straight from the internet! (ask '!help pun toxic' for details on radioactivity)"
+        }.to_owned()
     }
 }
 
-bindings::export!(Component);
+impl_command!(Component);
