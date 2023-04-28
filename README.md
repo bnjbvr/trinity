@@ -79,7 +79,9 @@ ideas, please go ahead :)
 
 ## Deploy with Docker
 
-First, build the Docker image:
+If you want, you can use the image published on Docker
+([bnjbvr/trinity](https://hub.docker.com/repository/docker/bnjbvr/trinity)) -- it might be lagging
+behind by a few commits -- or build the Docker image yourself:
 
 ```
 docker build -t bnjbvr/trinity .
@@ -92,12 +94,27 @@ docker run -e HOMESERVER="matrix.example.com" \
     -e BOT_USER_ID="@trinity:example.com" \
     -e BOT_PWD="hunter2" \
     -e ADMIN_USER_ID="@admin:example.com" \
-    -v /host/path/to/data/directory:/opt/trinity/data
-    bnjbvr/trinity
+    -v /host/path/to/data/directory:/opt/trinity/data \
+    -ti bnjbvr/trinity
 ```
 
 Data is saved in the `/opt/trinity/data` directory, and it is recommended to make it a volume so as
 to be able to decrypt messages over multiple sessions and so on.
+
+If you want, you can specify a custom modules directory using the `MODULES_PATHS` environment
+variable and adding another data volume for it. This can be useful for hacking modules only without
+having to compile the host runtime. Here's how you can do that:
+
+```
+docker run -e HOMESERVER="matrix.example.com" \
+    -e BOT_USER_ID="@trinity:example.com" \
+    -e BOT_PWD="hunter2" \
+    -e ADMIN_USER_ID="@admin:example.com" \
+    -e MODULES_PATH="/wasm-modules" \
+    -v /host/path/to/data/directory:/opt/trinity/data \
+    -v /host/path/to/modules:/wasm-modules \
+    -ti bnjbvr/trinity
+```
 
 ## Is it any good?
 

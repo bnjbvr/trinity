@@ -2,3 +2,4 @@ target/
 .env
 trinity.db
 cache/
+data/
