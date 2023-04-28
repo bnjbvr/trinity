@@ -10,69 +10,56 @@
 //! - Because of that, I've had to put most of the code, including the whole `impl Interface for X`
 //! block, in the macro body. It's ugly and not practical for maintainability purposes.
 
+/// Implements a command for a given type, assuming the type implements the `TrinityCommand` trait.
 #[macro_export]
 macro_rules! impl_command {
     ($ident:ident) => {
-        const _: () = {
-            type Wrapped = TrinityCommandWrapper<Component>;
-
-            /// Small wrapper which sole purpose is to work around the impossibility to have `impl Interface
-            /// for T where T: TrinityCommand`.
-            #[doc(hidden)]
-            pub struct TrinityCommandWrapper<T> {
-                _phantom: std::marker::PhantomData<T>,
+        impl bindings::interface::Interface for $ident {
+            fn init() {
+                <Self as TrinityCommand>::init();
             }
 
-            impl<T> bindings::interface::Interface for TrinityCommandWrapper<T>
-            where
-                T: TrinityCommand,
-            {
-                fn init() {
-                    <T as TrinityCommand>::init();
-                }
-
-                fn help(topic: Option<String>) -> String {
-                    <T as TrinityCommand>::on_help(topic.as_deref())
-                }
-
-                fn on_msg(
-                    content: String,
-                    author_id: String,
-                    _author_name: String,
-                    _room: String,
-                ) -> Vec<bindings::interface::Message> {
-                    let mut client = CommandClient::default();
-                    <T as TrinityCommand>::on_msg(&mut client, &content);
-                    client
-                        .messages
-                        .into_iter()
-                        .map(|msg| bindings::interface::Message {
-                            content: msg,
-                            to: author_id.clone(),
-                        })
-                        .collect()
-                }
-
-                fn admin(
-                    cmd: String,
-                    author_id: String,
-                    room: String,
-                ) -> Vec<bindings::interface::Message> {
-                    let mut client = CommandClient::default();
-                    <T as TrinityCommand>::on_admin(&mut client, &cmd, &room);
-                    client
-                        .messages
-                        .into_iter()
-                        .map(|msg| bindings::interface::Message {
-                            content: msg,
-                            to: author_id.clone(),
-                        })
-                        .collect()
-                }
+            fn help(topic: Option<String>) -> String {
+                <Self as TrinityCommand>::on_help(topic.as_deref())
             }
 
-            bindings::export!(Wrapped);
-        };
+            fn on_msg(
+                content: String,
+                author_id: String,
+                _author_name: String,
+                _room: String,
+            ) -> Vec<bindings::interface::Message> {
+                let mut client = CommandClient::default();
+                <Self as TrinityCommand>::on_msg(&mut client, &content);
+                client
+                    .messages
+                    .into_iter()
+                    .map(|msg| bindings::interface::Message {
+                        content: msg,
+                        to: author_id.clone(),
+                    })
+                    .collect()
+            }
+
+            fn admin(
+                cmd: String,
+                author_id: String,
+                room: String,
+            ) -> Vec<bindings::interface::Message> {
+                let mut client = CommandClient::default();
+                <Self as TrinityCommand>::on_admin(&mut client, &cmd, &room);
+                client
+                    .messages
+                    .into_iter()
+                    .map(|msg| bindings::interface::Message {
+                        content: msg,
+                        to: author_id.clone(),
+                    })
+                    .collect()
+            }
+        }
+
+        bindings::export!($ident);
     };
 }
 
