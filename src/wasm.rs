@@ -4,6 +4,8 @@ mod module {
     });
 }
 
+pub(crate) use module::messaging::Action;
+
 mod apis;
 
 use std::path::PathBuf;
@@ -47,7 +49,7 @@ impl Module {
         cmd: &str,
         sender: &UserId,
         room: &str,
-    ) -> anyhow::Result<Vec<module::messaging::Message>> {
+    ) -> anyhow::Result<Vec<module::messaging::Action>> {
         self.exports
             .messaging()
             .call_admin(store, cmd, sender.as_str(), room)
@@ -59,7 +61,7 @@ impl Module {
         content: &str,
         sender: &UserId,
         room: &RoomId,
-    ) -> anyhow::Result<Vec<module::messaging::Message>> {
+    ) -> anyhow::Result<Vec<module::messaging::Action>> {
         self.exports.messaging().call_on_msg(
             store,
             content,

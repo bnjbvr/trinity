@@ -1,4 +1,4 @@
-use bindings::messaging;
+use libcommand::{CommandClient, TrinityCommand, impl_command};
 use wit_log as log;
 use wit_sync_request;
 
@@ -32,36 +32,22 @@ impl Component {
     }
 }
 
-impl messaging::Messaging for Component {
+impl TrinityCommand for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(crate::log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help(_topic: Option<String>) -> String {
+    fn on_help(_topic: Option<&str>) -> String {
         "Contextless twitter quotes about the JavaScript".to_owned()
     }
 
-    fn on_msg(
-        content: String,
-        author_id: String,
-        _author_name: String,
-        _room: String,
-    ) -> Vec<messaging::Message> {
+    fn on_msg(client: &mut CommandClient, content: &str) {
         if let Some(content) = Self::get_quote(&content) {
-            vec![messaging::Message {
-                content,
-                to: author_id,
-            }]
-        } else {
-            vec![]
+            client.respond(content);
         }
-    }
-
-    fn admin(_cmd: String, _author: String, _room: String) -> Vec<messaging::Message> {
-        Vec::new()
     }
 }
 
-bindings::export!(Component);
+impl_command!(Component);

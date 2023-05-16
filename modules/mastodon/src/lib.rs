@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use bindings::messaging;
+use libcommand::{impl_command, CommandClient, TrinityCommand};
 use wit_log as log;
 use wit_sync_request;
 
@@ -137,15 +137,15 @@ impl Component {
     }
 }
 
-impl messaging::Messaging for Component {
+impl TrinityCommand for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(crate::log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
     }
 
-    fn help(topic: Option<String>) -> String {
+    fn on_help(topic: Option<&str>) -> String {
         if let Some(topic) = topic {
-            match topic.as_str() {
+            match topic {
                 "admin" => r#"available admin commands:
 - set-config #BASE_URL #TOKEN
 - remove-config
@@ -161,36 +161,22 @@ impl messaging::Messaging for Component {
         }
     }
 
-    fn on_msg(
-        content: String,
-        author_id: String,
-        _author_name: String,
-        room: String,
-    ) -> Vec<messaging::Message> {
-        let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
-            return Vec::new();
-        };
-        let content = match Self::handle_msg(&author_id, &content, &room) {
+    fn on_msg(client: &mut CommandClient, content: &str) {
+        let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else { return };
+        let content = match Self::handle_msg(client.from(), &content, client.room()) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
-        vec![messaging::Message {
-            to: author_id,
-            content,
-        }]
+        client.respond(content);
     }
 
-    fn admin(cmd: String, author: String, room: String) -> Vec<messaging::Message> {
-        let content = match Self::handle_admin(&cmd, &author, &room) {
+    fn on_admin(client: &mut CommandClient, cmd: &str) {
+        let content = match Self::handle_admin(&cmd, client.from(), client.room()) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
-
-        vec![messaging::Message {
-            content,
-            to: author,
-        }]
+        client.respond(content);
     }
 }
 
-bindings::export!(Component);
+impl_command!(Component);
