@@ -18,12 +18,4 @@ wit-log.workspace = true
 crate-type = ["cdylib"]
 
 [package.metadata.component]
-direct-export = "interface"
-
-[package.metadata.component.imports]
-kv = "../../wit/kv.wit"
-log = "../../wit/log.wit"
-
-[package.metadata.component.exports]
-interface = "../../wit/trinity-module.wit"
-
+target.path = "../../wit/trinity-module.wit"

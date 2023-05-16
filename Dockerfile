@@ -18,7 +18,7 @@ RUN cargo build --release
 WORKDIR /build/modules
 RUN ./install-cargo-component.sh && \
     rustup component add rustfmt
-RUN cargo component build --release
+RUN cargo component build --target=wasm32-unknown-unknown --release
 
 # Actual image.
 FROM debian:bullseye-slim

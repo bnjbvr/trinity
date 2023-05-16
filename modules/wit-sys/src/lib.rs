@@ -1,8 +1,5 @@
 mod wit {
-    wit_bindgen_guest_rust::generate!({
-        import: "../../wit/sys.wit",
-        name: "sys"
-    });
+    wit_bindgen::generate!("sys" in "../../wit/sys.wit");
     pub use self::sys::*;
 }
 

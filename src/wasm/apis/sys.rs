@@ -1,8 +1,8 @@
 use crate::wasm::GuestState;
 
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/sys.wit",
-    name: "sys"
+wasmtime::component::bindgen!({
+    path: "./wit/sys.wit",
+    world: "sys"
 });
 
 pub(super) struct SysApi;
@@ -16,7 +16,7 @@ impl SysApi {
     }
 }
 
-impl sys::Sys for SysApi {
+impl sys::Host for SysApi {
     fn rand_u64(&mut self) -> anyhow::Result<u64> {
         Ok(rand::random())
     }

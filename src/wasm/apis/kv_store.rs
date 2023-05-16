@@ -2,9 +2,9 @@ use redb::{ReadableTable as _, TableDefinition};
 
 use crate::{wasm::GuestState, ShareableDatabase};
 
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/kv.wit",
-    name: "kv_store"
+wasmtime::component::bindgen!({
+    path: "./wit/kv.wit",
+    world: "kv"
 });
 
 pub(super) struct KeyValueStoreApi {
@@ -28,7 +28,7 @@ impl KeyValueStoreApi {
     }
 }
 
-impl kv::Kv for KeyValueStoreApi {
+impl kv::Host for KeyValueStoreApi {
     fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {
         let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
         let txn = self.db.begin_write()?;

@@ -14,13 +14,13 @@
 #[macro_export]
 macro_rules! impl_command {
     ($ident:ident) => {
-        impl bindings::interface::Interface for $ident {
+        impl bindings::messaging::Messaging for $ident {
             fn init() {
-                <Self as TrinityCommand>::init();
+                <Self as $crate::TrinityCommand>::init();
             }
 
             fn help(topic: Option<String>) -> String {
-                <Self as TrinityCommand>::on_help(topic.as_deref())
+                <Self as $crate::TrinityCommand>::on_help(topic.as_deref())
             }
 
             fn on_msg(
@@ -28,13 +28,13 @@ macro_rules! impl_command {
                 author_id: String,
                 _author_name: String,
                 _room: String,
-            ) -> Vec<bindings::interface::Message> {
+            ) -> Vec<bindings::messaging::Message> {
                 let mut client = CommandClient::default();
-                <Self as TrinityCommand>::on_msg(&mut client, &content);
+                <Self as $crate::TrinityCommand>::on_msg(&mut client, &content);
                 client
                     .messages
                     .into_iter()
-                    .map(|msg| bindings::interface::Message {
+                    .map(|msg| bindings::messaging::Message {
                         content: msg,
                         to: author_id.clone(),
                     })
@@ -45,13 +45,13 @@ macro_rules! impl_command {
                 cmd: String,
                 author_id: String,
                 room: String,
-            ) -> Vec<bindings::interface::Message> {
+            ) -> Vec<bindings::messaging::Message> {
                 let mut client = CommandClient::default();
-                <Self as TrinityCommand>::on_admin(&mut client, &cmd, &room);
+                <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd, &room);
                 client
                     .messages
                     .into_iter()
-                    .map(|msg| bindings::interface::Message {
+                    .map(|msg| bindings::messaging::Message {
                         content: msg,
                         to: author_id.clone(),
                     })

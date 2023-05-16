@@ -1,8 +1,5 @@
 mod wit {
-    wit_bindgen_guest_rust::generate!({
-        import: "../../wit/log.wit",
-        name: "log"
-    });
+    wit_bindgen::generate!("log" in "../../wit/log.wit");
     pub use self::log::*;
 }
 

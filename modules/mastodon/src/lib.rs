@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use bindings::interface;
+use bindings::messaging;
 use wit_log as log;
 use wit_sync_request;
 
@@ -137,7 +137,7 @@ impl Component {
     }
 }
 
-impl interface::Interface for Component {
+impl messaging::Messaging for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(crate::log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
@@ -166,7 +166,7 @@ impl interface::Interface for Component {
         author_id: String,
         _author_name: String,
         room: String,
-    ) -> Vec<interface::Message> {
+    ) -> Vec<messaging::Message> {
         let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
             return Vec::new();
         };
@@ -174,19 +174,19 @@ impl interface::Interface for Component {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
-        vec![interface::Message {
+        vec![messaging::Message {
             to: author_id,
             content,
         }]
     }
 
-    fn admin(cmd: String, author: String, room: String) -> Vec<interface::Message> {
+    fn admin(cmd: String, author: String, room: String) -> Vec<messaging::Message> {
         let content = match Self::handle_admin(&cmd, &author, &room) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
 
-        vec![interface::Message {
+        vec![messaging::Message {
             content,
             to: author,
         }]

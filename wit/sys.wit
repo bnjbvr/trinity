@@ -1,1 +1,7 @@
-rand-u64: func() -> u64
+interface sys {
+    rand-u64: func() -> u64
+}
+
+default world sys-world {
+    import sys: self.sys
+}

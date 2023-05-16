@@ -1,5 +1,12 @@
-trace: func(s: string)
-debug: func(s: string)
-info: func(s: string)
-warn: func(s: string)
-error: func(s: string)
+interface log {
+    trace: func(s: string)
+    debug: func(s: string)
+    info: func(s: string)
+    warn: func(s: string)
+    error: func(s: string)
+}
+
+// dummy world TODO?
+default world log-world {
+    import log: self.log
+}

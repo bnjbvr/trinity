@@ -1,4 +1,4 @@
-use bindings::interface;
+use bindings::messaging;
 use wit_log as log;
 use wit_sync_request;
 
@@ -32,7 +32,7 @@ impl Component {
     }
 }
 
-impl interface::Interface for Component {
+impl messaging::Messaging for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(crate::log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
@@ -48,9 +48,9 @@ impl interface::Interface for Component {
         author_id: String,
         _author_name: String,
         _room: String,
-    ) -> Vec<interface::Message> {
+    ) -> Vec<messaging::Message> {
         if let Some(content) = Self::get_quote(&content) {
-            vec![interface::Message {
+            vec![messaging::Message {
                 content,
                 to: author_id,
             }]
@@ -59,7 +59,7 @@ impl interface::Interface for Component {
         }
     }
 
-    fn admin(_cmd: String, _author: String, _room: String) -> Vec<interface::Message> {
+    fn admin(_cmd: String, _author: String, _room: String) -> Vec<messaging::Message> {
         Vec::new()
     }
 }

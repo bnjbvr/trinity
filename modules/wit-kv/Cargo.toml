@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wit-bindgen-guest-rust.workspace = true
+wit-bindgen.workspace = true
 serde = "1.0.147"
 serde_json = "1.0.87"
 anyhow = "1.0.66"
