@@ -1,29 +1,20 @@
-use bindings::messaging;
+use libcommand::{impl_command, TrinityCommand};
 use wit_log as log;
 
 struct Component;
 
-impl messaging::Messaging for Component {
+impl TrinityCommand for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help(_topic: Option<String>) -> String {
+    fn on_help(_topic: Option<&str>) -> String {
         "Secret tester".to_owned()
     }
 
-    fn on_msg(
-        _content: String,
-        _author_id: String,
-        _author_name: String,
-        _room: String,
-    ) -> Vec<messaging::Message> {
-        Vec::new()
-    }
-
-    fn admin(cmd: String, author_id: String, _room: String) -> Vec<messaging::Message> {
+    fn on_admin(client: &mut libcommand::CommandClient, cmd: &str) {
         let mut msg = None;
 
         match cmd.split_once(" ") {
@@ -55,14 +46,13 @@ impl messaging::Messaging for Component {
         }
 
         if let Some(msg) = msg {
-            vec![messaging::Message {
-                content: msg,
-                to: author_id,
-            }]
-        } else {
-            Vec::new()
+            client.respond(msg);
         }
+    }
+
+    fn on_msg(_client: &mut libcommand::CommandClient, _content: &str) {
+        // Nothing!
     }
 }
 
-bindings::export!(Component);
+impl_command!(Component);

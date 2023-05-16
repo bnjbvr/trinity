@@ -177,9 +177,11 @@ fn try_handle_admin<'a>(
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
     room_resolver: &mut RoomResolver,
-) -> Option<Vec<String>> {
-    let Some(rest) = content.strip_prefix("!admin") else { return None };
+) -> anyhow::Result<Option<Vec<wasm::Action>>> {
+    let Some(rest) = content.strip_prefix("!admin") else { return Ok(None) };
+
     tracing::trace!("trying admin for {content}");
+
     if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
         if let Some((module, rest)) = rest.split_once(' ').map(|(l, r)| (l, r.trim())) {
@@ -198,7 +200,7 @@ fn try_handle_admin<'a>(
             for m in modules {
                 if m.name() == module {
                     found = match m.admin(&mut *store, rest.trim(), sender, target_room.as_str()) {
-                        Ok(msgs) => Some(msgs),
+                        Ok(actions) => Some(actions),
                         Err(err) => {
                             tracing::error!("error when handling admin command: {err:#}");
                             None
@@ -207,12 +209,12 @@ fn try_handle_admin<'a>(
                     break;
                 }
             }
-            found.map(|messages| messages.into_iter().map(|msg| msg.content).collect())
+            Ok(found)
         } else {
-            Some(vec!["missing command".to_owned()])
+            anyhow::bail!("missing command")
         }
     } else {
-        Some(vec!["missing module and command".to_owned()])
+        anyhow::bail!("missing module and command")
     }
 }
 
@@ -322,7 +324,7 @@ async fn on_message(
             let (store, modules) = ctx.modules.iter();
 
             if ev.sender() == ctx.admin_user_id {
-                if let Some(admin_messages) = try_handle_admin(
+                match try_handle_admin(
                     &content,
                     &ctx.admin_user_id,
                     &room_id,
@@ -330,11 +332,20 @@ async fn on_message(
                     modules.clone(),
                     &mut ctx.room_resolver,
                 ) {
-                    tracing::trace!("handled by admin, skipping modules");
-                    return admin_messages
-                        .into_iter()
-                        .map(RoomMessageEventContent::text_plain)
-                        .collect();
+                    Ok(None) => {}
+                    Ok(Some(actions)) => {
+                        tracing::trace!("handled by admin, skipping modules");
+                        return actions
+                            .into_iter()
+                            .map(|a| match a {
+                                wasm::Action::Respond(msg) => {
+                                    RoomMessageEventContent::text_plain(msg.content)
+                                }
+                                wasm::Action::React(_react) => todo!(),
+                            })
+                            .collect();
+                    }
+                    Err(err) => return vec![RoomMessageEventContent::text_plain(err.to_string())],
                 }
             }
 
@@ -347,13 +358,20 @@ async fn on_message(
                 tracing::trace!("trying to handle message with {}...", module.name());
 
                 match module.handle(&mut *store, &content, ev.sender(), &room_id) {
-                    Ok(msgs) => {
-                        let stop = !msgs.is_empty();
+                    Ok(actions) => {
+                        let stop = !actions.is_empty();
 
-                        for msg in msgs {
-                            let text = RoomMessageEventContent::text_plain(msg.content);
-                            // TODO take msg.to into consideration, don't always answer the whole room
-                            outgoing_messages.push(text);
+                        for action in actions {
+                            match action {
+                                wasm::Action::Respond(msg) => {
+                                    let text = RoomMessageEventContent::text_plain(msg.content);
+                                    // TODO take msg.to into consideration, don't always answer the whole room
+                                    outgoing_messages.push(text);
+                                }
+                                wasm::Action::React(_reaction) => {
+                                    todo!();
+                                }
+                            }
                         }
 
                         // TODO support handling the same message with several handlers.

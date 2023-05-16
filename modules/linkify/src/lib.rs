@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use bindings::messaging;
+use libcommand::{impl_command, CommandClient, TrinityCommand};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use shlex;
@@ -164,16 +164,16 @@ impl Component {
     }
 }
 
-impl messaging::Messaging for Component {
+impl TrinityCommand for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
         log::trace!("Called the init() method \\o/");
     }
 
-    fn help(topic: Option<String>) -> String {
+    fn on_help(topic: Option<&str>) -> String {
         if let Some(topic) = topic {
-            match topic.as_str() {
+            match topic {
                 "admin" => dedent!(
                     r#"
                     ### Command Overview
@@ -225,32 +225,19 @@ impl messaging::Messaging for Component {
         }
     }
 
-    fn on_msg(
-        content: String,
-        author_id: String,
-        _author_name: String,
-        room: String,
-    ) -> Vec<messaging::Message> {
-        if let Some(content) = Self::replace(&content, Self::get_room_config(&room)) {
-            vec![messaging::Message {
-                content,
-                to: author_id,
-            }]
-        } else {
-            vec![]
+    fn on_msg(client: &mut CommandClient, content: &str) {
+        if let Some(content) = Self::replace(&content, Self::get_room_config(client.room())) {
+            client.respond(content);
         }
     }
 
-    fn admin(cmd: String, author: String, room: String) -> Vec<messaging::Message> {
-        let content = match Self::handle_admin(&cmd, &author, &room) {
+    fn on_admin(client: &mut CommandClient, cmd: &str) {
+        let content = match Self::handle_admin(&cmd, client.from(), client.room()) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
-
-        vec![messaging::Message {
-            content,
-            to: author,
-        }]
+        client.respond(content);
     }
 }
-bindings::export!(Component);
+
+impl_command!(Component);

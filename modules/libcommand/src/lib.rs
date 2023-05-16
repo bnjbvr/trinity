@@ -27,16 +27,18 @@ macro_rules! impl_command {
                 content: String,
                 author_id: String,
                 _author_name: String,
-                _room: String,
-            ) -> Vec<bindings::messaging::Message> {
-                let mut client = CommandClient::default();
+                room: String,
+            ) -> Vec<bindings::messaging::Action> {
+                let mut client = $crate::CommandClient::new(room, author_id.clone());
                 <Self as $crate::TrinityCommand>::on_msg(&mut client, &content);
                 client
                     .messages
                     .into_iter()
-                    .map(|msg| bindings::messaging::Message {
-                        content: msg,
-                        to: author_id.clone(),
+                    .map(|msg| {
+                        bindings::messaging::Action::Respond(bindings::messaging::Message {
+                            content: msg.1,
+                            to: msg.0 .0,
+                        })
                     })
                     .collect()
             }
@@ -45,15 +47,17 @@ macro_rules! impl_command {
                 cmd: String,
                 author_id: String,
                 room: String,
-            ) -> Vec<bindings::messaging::Message> {
-                let mut client = CommandClient::default();
-                <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd, &room);
+            ) -> Vec<bindings::messaging::Action> {
+                let mut client = $crate::CommandClient::new(room.clone(), author_id);
+                <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd);
                 client
                     .messages
                     .into_iter()
-                    .map(|msg| bindings::messaging::Message {
-                        content: msg,
-                        to: author_id.clone(),
+                    .map(|msg| {
+                        bindings::messaging::Action::Respond(bindings::messaging::Message {
+                            content: msg.1,
+                            to: msg.0 .0,
+                        })
                     })
                     .collect()
             }
@@ -63,15 +67,41 @@ macro_rules! impl_command {
     };
 }
 
-#[derive(Default)]
+pub struct Recipient(pub String);
+
 pub struct CommandClient {
-    pub messages: Vec<String>,
+    inbound_msg_room: String,
+    inbound_msg_author: String,
+    pub messages: Vec<(Recipient, String)>,
 }
 
 impl CommandClient {
-    /// Queues a message to be sent to someone.
+    pub fn new(room: String, author: String) -> Self {
+        Self {
+            inbound_msg_room: room,
+            inbound_msg_author: author,
+            messages: Default::default(),
+        }
+    }
+
+    /// Who sent the original message we're reacting to?
+    pub fn from(&self) -> &str {
+        &self.inbound_msg_author
+    }
+
+    /// Indicates in which room this message has been received.
+    pub fn room(&self) -> &str {
+        &self.inbound_msg_room
+    }
+
+    /// Queues a message to be sent to the author of the original message.
     pub fn respond(&mut self, msg: String) {
-        self.messages.push(msg);
+        self.respond_to(msg, self.inbound_msg_author.clone())
+    }
+
+    /// Queues a message to be sent to someone else.
+    pub fn respond_to(&mut self, msg: String, author: String) {
+        self.messages.push((Recipient(author), msg));
     }
 }
 
@@ -101,5 +131,5 @@ pub trait TrinityCommand {
     /// Handle a message received by an admin, prefixed with the `!admin` subject.
     ///
     /// By default this does nothing, as admin commands are facultative.
-    fn on_admin(_client: &mut CommandClient, _command: &str, _room: &str) {}
+    fn on_admin(_client: &mut CommandClient, _command: &str) {}
 }

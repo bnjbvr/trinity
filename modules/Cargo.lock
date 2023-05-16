@@ -95,6 +95,7 @@ name = "horsejs"
 version = "0.1.0"
 dependencies = [
  "horsejs-bindings",
+ "libcommand",
  "serde",
  "serde_json",
  "wit-log",
@@ -162,6 +163,7 @@ name = "linkify"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libcommand",
  "linkify-bindings",
  "regex",
  "serde",
@@ -193,6 +195,7 @@ name = "mastodon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libcommand",
  "mastodon-bindings",
  "serde",
  "serde_json",
@@ -226,6 +229,7 @@ name = "openai"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libcommand",
  "openai-bindings",
  "serde",
  "serde_json",
@@ -329,6 +333,7 @@ checksum = "f91339c0467de62360649f8d3e185ca8de4224ff281f66000de5eb2a77a79041"
 name = "secret"
 version = "0.1.0"
 dependencies = [
+ "libcommand",
  "secret-bindings",
  "wit-kv",
  "wit-log",
