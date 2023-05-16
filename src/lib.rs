@@ -8,9 +8,12 @@ use matrix_sdk::{
     event_handler::Ctx,
     room::Room,
     ruma::{
-        events::room::{
-            member::StrippedRoomMemberEvent,
-            message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
+        events::{
+            reaction::{ReactionEventContent, Relation},
+            room::{
+                member::StrippedRoomMemberEvent,
+                message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
+            },
         },
         OwnedUserId, RoomId, UserId,
     },
@@ -218,11 +221,16 @@ fn try_handle_admin<'a>(
     }
 }
 
+struct Help {
+    text: String,
+    html: String,
+}
+
 fn try_handle_help<'a>(
     content: &str,
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
-) -> Option<Vec<RoomMessageEventContent>> {
+) -> Option<Help> {
     let Some(rest) = content.strip_prefix("!help") else { return None };
 
     // Special handling for help messages.
@@ -273,7 +281,22 @@ fn try_handle_help<'a>(
         return None;
     };
 
-    Some(vec![RoomMessageEventContent::text_html(msg, html)])
+    Some(Help { text: msg, html })
+}
+
+enum AnyEvent {
+    RoomMessage(RoomMessageEventContent),
+    Reaction(ReactionEventContent),
+}
+
+impl AnyEvent {
+    async fn send(self, room: &mut matrix_sdk::room::Joined) -> anyhow::Result<()> {
+        let _ = match self {
+            AnyEvent::RoomMessage(e) => room.send(e, None).await?,
+            AnyEvent::Reaction(e) => room.send(e, None).await?,
+        };
+        Ok(())
+    }
 }
 
 async fn on_message(
@@ -282,7 +305,7 @@ async fn on_message(
     client: Client,
     Ctx(ctx): Ctx<App>,
 ) -> anyhow::Result<()> {
-    let room = if let Room::Joined(room) = room {
+    let mut room = if let Room::Joined(room) = room {
         room
     } else {
         // Ignore non-joined rooms events.
@@ -316,10 +339,10 @@ async fn on_message(
         let ctx = ctx.inner.clone();
         let room_id = room.room_id().to_owned();
 
-        let messages = tokio::task::spawn_blocking(move || {
+        let new_events = tokio::task::spawn_blocking(move || {
             let ctx = &mut *futures::executor::block_on(ctx.lock());
 
-            let mut outgoing_messages = Vec::new();
+            let mut outgoing_events = Vec::new();
 
             let (store, modules) = ctx.modules.iter();
 
@@ -338,20 +361,32 @@ async fn on_message(
                         return actions
                             .into_iter()
                             .map(|a| match a {
-                                wasm::Action::Respond(msg) => {
-                                    RoomMessageEventContent::text_plain(msg.content)
+                                wasm::Action::Respond(msg) => AnyEvent::RoomMessage(
+                                    RoomMessageEventContent::text_plain(msg.content),
+                                ),
+                                wasm::Action::React(reaction) => {
+                                    let reaction = ReactionEventContent::new(Relation::new(
+                                        ev.event_id().to_owned(),
+                                        reaction,
+                                    ));
+                                    AnyEvent::Reaction(reaction)
                                 }
-                                wasm::Action::React(_react) => todo!(),
                             })
                             .collect();
                     }
-                    Err(err) => return vec![RoomMessageEventContent::text_plain(err.to_string())],
+                    Err(err) => {
+                        return vec![AnyEvent::RoomMessage(RoomMessageEventContent::text_plain(
+                            err.to_string(),
+                        ))]
+                    }
                 }
             }
 
-            if let Some(help_messages) = try_handle_help(&content, store, modules.clone()) {
+            if let Some(help) = try_handle_help(&content, store, modules.clone()) {
                 tracing::trace!("handled by help, skipping modules");
-                return help_messages;
+                return vec![AnyEvent::RoomMessage(RoomMessageEventContent::text_html(
+                    help.text, help.html,
+                ))];
             }
 
             for module in modules {
@@ -366,10 +401,14 @@ async fn on_message(
                                 wasm::Action::Respond(msg) => {
                                     let text = RoomMessageEventContent::text_plain(msg.content);
                                     // TODO take msg.to into consideration, don't always answer the whole room
-                                    outgoing_messages.push(text);
+                                    outgoing_events.push(AnyEvent::RoomMessage(text));
                                 }
-                                wasm::Action::React(_reaction) => {
-                                    todo!();
+                                wasm::Action::React(reaction) => {
+                                    let reaction = ReactionEventContent::new(Relation::new(
+                                        ev.event_id().to_owned(),
+                                        reaction,
+                                    ));
+                                    outgoing_events.push(AnyEvent::Reaction(reaction));
                                 }
                             }
                         }
@@ -377,7 +416,7 @@ async fn on_message(
                         // TODO support handling the same message with several handlers.
                         if stop {
                             tracing::trace!("{} returned a response!", module.name());
-                            return outgoing_messages;
+                            return outgoing_events;
                         }
                     }
 
@@ -387,12 +426,12 @@ async fn on_message(
                 }
             }
 
-            outgoing_messages
+            outgoing_events
         })
         .await?;
 
-        for msg in messages {
-            room.send(msg, None).await?;
+        for event in new_events {
+            event.send(&mut room).await?;
         }
     }
 

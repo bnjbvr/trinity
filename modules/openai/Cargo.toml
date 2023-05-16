@@ -10,7 +10,6 @@ serde_json = "1.0.87"
 
 libcommand.workspace = true
 wit-log.workspace = true
-wit-sys.workspace = true
 wit-sync-request.workspace = true
 wit-kv.workspace = true
 
