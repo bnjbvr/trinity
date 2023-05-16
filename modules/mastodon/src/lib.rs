@@ -1,4 +1,3 @@
-use anyhow::Context as _;
 use libcommand::{impl_command, CommandClient, TrinityCommand};
 use wit_log as log;
 use wit_sync_request;
@@ -17,125 +16,6 @@ impl RoomConfig {
 }
 
 struct Component;
-
-impl Component {
-    fn handle_msg(author_id: &str, content: &str, room: &str) -> anyhow::Result<String> {
-        let mut config = wit_kv::get::<_, RoomConfig>(room)
-            .context("couldn't read room configuration")?
-            .context("missing room configuration")?;
-
-        anyhow::ensure!(
-            config.is_admin(author_id),
-            "you're not allowed to post, sorry!"
-        );
-
-        if !config.base_url.ends_with("/") {
-            config.base_url.push('/');
-        }
-        config.base_url.push_str("api/v1/statuses");
-
-        #[derive(serde::Serialize)]
-        struct Request {
-            status: String,
-        }
-
-        let body = serde_json::to_string(&Request {
-            status: content.to_owned(),
-        })?;
-
-        let resp = wit_sync_request::Request::post(&config.base_url)
-            .header("Authorization", &format!("Bearer {}", config.token))
-            .header("Content-Type", "application/json")
-            .body(&body)
-            .run()
-            .ok()
-            .context("no response")?;
-
-        if resp.status != wit_sync_request::ResponseStatus::Success {
-            log::info!(
-                "request failed with non-success status code:\n\t{:?}",
-                resp.body
-            );
-            anyhow::bail!("error when sending toot, see logs!");
-        }
-
-        Ok("great success!".to_owned())
-    }
-
-    fn handle_admin(cmd: &str, sender: &str, room: &str) -> anyhow::Result<String> {
-        if let Some(rest) = cmd.strip_prefix("set-config") {
-            // Format: set-config BASE_URL TOKEN
-            let mut split = rest.trim().split_whitespace();
-
-            let base_url = split.next().context("missing base url")?;
-            let token = split.next().context("missing token")?;
-
-            let config = RoomConfig {
-                admins: vec![sender.to_owned()],
-                token: token.to_owned(),
-                base_url: base_url.to_owned(),
-            };
-
-            wit_kv::set(&room, &config).context("writing to kv store")?;
-
-            return Ok("added!".to_owned());
-        }
-
-        if cmd.starts_with("remove-config") {
-            // Format: remove-config
-            wit_kv::remove(&room).context("writing to kv store")?;
-
-            return Ok("removed config for that room!".to_owned());
-        }
-
-        if let Some(rest) = cmd.strip_prefix("allow") {
-            // Format: allow USER_ID
-            let mut split = rest.trim().split_whitespace();
-
-            let user_id = split.next().context("missing user id")?;
-
-            let mut current = wit_kv::get::<_, RoomConfig>(&room)
-                .context("couldn't read room config for room")?
-                .context("missing config for room")?;
-
-            current.admins.push(user_id.to_owned());
-
-            wit_kv::set(&room, &current).context("writing to kv store")?;
-
-            return Ok("added admin!".to_owned());
-        }
-
-        if let Some(rest) = cmd.strip_prefix("disallow") {
-            // Format: disallow USER_ID
-            let mut split = rest.trim().split_whitespace();
-            let user_id = split.next().context("missing user id")?;
-
-            let mut current = wit_kv::get::<_, RoomConfig>(&room)
-                .context("couldn't read room config for room")?
-                .context("missing config for room")?;
-
-            if let Some(idx) = current.admins.iter().position(|val| val == user_id) {
-                current.admins.remove(idx);
-            } else {
-                return Ok("admin not found".to_owned());
-            }
-
-            wit_kv::set(&room, &current).context("writing to kv store")?;
-            return Ok("removed admin!".to_owned());
-        }
-
-        if cmd.starts_with("list-posters") {
-            // Format: list-posters ROOM
-            let current = wit_kv::get::<_, RoomConfig>(&room)
-                .context("couldn't read room config for room")?
-                .context("no config for room")?;
-
-            return Ok(current.admins.join(", "));
-        }
-
-        Ok("unknown command!".into())
-    }
-}
 
 impl TrinityCommand for Component {
     fn init() {
@@ -163,19 +43,139 @@ impl TrinityCommand for Component {
 
     fn on_msg(client: &mut CommandClient, content: &str) {
         let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else { return };
-        let content = match Self::handle_msg(client.from(), &content, client.room()) {
-            Ok(resp) => resp,
-            Err(err) => err.to_string(),
+
+        let author_id = client.from();
+        let content: &str = &content;
+        let room = client.room();
+
+        let Ok(Some(mut config)) = wit_kv::get::<_, RoomConfig>(room) else {
+            return client.respond("couldn't read room configuration (error or missing)");
         };
-        client.respond(content);
+
+        if !config.is_admin(author_id) {
+            return client.respond("you're not allowed to post, sorry!");
+        }
+
+        if !config.base_url.ends_with("/") {
+            config.base_url.push('/');
+        }
+        config.base_url.push_str("api/v1/statuses");
+
+        #[derive(serde::Serialize)]
+        struct Request {
+            status: String,
+        }
+
+        let body = serde_json::to_string(&Request {
+            status: content.to_owned(),
+        })
+        .unwrap();
+
+        let Some(resp) = wit_sync_request::Request::post(&config.base_url)
+            .header("Authorization", &format!("Bearer {}", config.token))
+            .header("Content-Type", "application/json")
+            .body(&body)
+            .run()
+            .ok()
+        else {
+            return client.respond("didn't receive a response from the server");
+        };
+
+        if resp.status != wit_sync_request::ResponseStatus::Success {
+            log::info!(
+                "request failed with non-success status code:\n\t{:?}",
+                resp.body
+            );
+            return client.respond("error when sending toot, see logs!".to_owned());
+        }
+
+        client.react_with_ok();
     }
 
     fn on_admin(client: &mut CommandClient, cmd: &str) {
-        let content = match Self::handle_admin(&cmd, client.from(), client.room()) {
-            Ok(resp) => resp,
-            Err(err) => err.to_string(),
-        };
-        client.respond(content);
+        let room = client.room();
+        let sender = client.from();
+
+        if let Some(rest) = cmd.strip_prefix("set-config") {
+            // Format: set-config BASE_URL TOKEN
+            let mut split = rest.trim().split_whitespace();
+
+            let Some(base_url) = split.next() else { return client.respond("missing base url"); };
+            let Some(token) = split.next() else { return client.respond("missing token") };
+
+            let config = RoomConfig {
+                admins: vec![sender.to_owned()],
+                token: token.to_owned(),
+                base_url: base_url.to_owned(),
+            };
+
+            if let Err(err) = wit_kv::set(&room, &config) {
+                return client.respond(format!("writing to kv store: {err:#}"));
+            }
+
+            return client.react_with_ok();
+        }
+
+        if cmd.starts_with("remove-config") {
+            // Format: remove-config
+            if let Err(err) = wit_kv::remove(&room) {
+                return client.respond(format!("writing to kv store: {err:#}"));
+            }
+
+            return client.react_with_ok();
+        }
+
+        if let Some(rest) = cmd.strip_prefix("allow") {
+            // Format: allow USER_ID
+            let mut split = rest.trim().split_whitespace();
+
+            let Some(user_id) = split.next() else { return client.respond("missing user id") };
+
+            let Ok(Some(mut current)) = wit_kv::get::<_, RoomConfig>(&room) else {
+                return client.respond("couldn't read room config for room");
+            };
+
+            current.admins.push(user_id.to_owned());
+
+            if let Err(err) = wit_kv::set(&room, &current) {
+                return client.respond(format!("when writing to kv store: {err:#}"));
+            }
+
+            return client.react_with_ok();
+        }
+
+        if let Some(rest) = cmd.strip_prefix("disallow") {
+            // Format: disallow USER_ID
+            let mut split = rest.trim().split_whitespace();
+
+            let Some(user_id) = split.next() else { return client.respond("missing user id") };
+
+            let Ok(Some(mut current)) = wit_kv::get::<_, RoomConfig>(&room) else {
+                return client.respond("couldn't read room config for room");
+            };
+
+            if let Some(idx) = current.admins.iter().position(|val| val == user_id) {
+                current.admins.remove(idx);
+            } else {
+                return client.respond("admin not found");
+            }
+
+            if let Err(err) = wit_kv::set(&room, &current) {
+                return client.respond(format!("when writing to kv store: {err:#}"));
+            }
+
+            return client.react_with_ok();
+        }
+
+        if cmd.starts_with("list-posters") {
+            // Format: list-posters ROOM
+            let Ok(Some(current)) = wit_kv::get::<_, RoomConfig>(&room) else {
+                return client.respond("couldn't read room config, or no config for this room");
+            };
+            return client.respond(current.admins.join(", "));
+        }
+
+        client.respond("unknown command!");
     }
 }
 

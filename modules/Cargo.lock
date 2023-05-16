@@ -167,7 +167,6 @@ dependencies = [
  "linkify-bindings",
  "regex",
  "serde",
- "serde_json",
  "shlex",
  "textwrap-macros",
  "wit-kv",
@@ -194,7 +193,6 @@ dependencies = [
 name = "mastodon"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "libcommand",
  "mastodon-bindings",
  "serde",
@@ -202,7 +200,6 @@ dependencies = [
  "wit-kv",
  "wit-log",
  "wit-sync-request",
- "wit-sys",
 ]
 
 [[package]]
@@ -236,7 +233,6 @@ dependencies = [
  "wit-kv",
  "wit-log",
  "wit-sync-request",
- "wit-sys",
 ]
 
 [[package]]

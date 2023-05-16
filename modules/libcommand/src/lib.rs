@@ -50,16 +50,24 @@ macro_rules! impl_command {
             ) -> Vec<bindings::messaging::Action> {
                 let mut client = $crate::CommandClient::new(room.clone(), author_id);
                 <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd);
-                client
-                    .messages
-                    .into_iter()
-                    .map(|msg| {
-                        bindings::messaging::Action::Respond(bindings::messaging::Message {
-                            content: msg.1,
-                            to: msg.0 .0,
-                        })
+
+                let mut actions = Vec::new();
+
+                actions.extend(client.messages.into_iter().map(|msg| {
+                    bindings::messaging::Action::Respond(bindings::messaging::Message {
+                        content: msg.1,
+                        to: msg.0 .0,
                     })
-                    .collect()
+                }));
+
+                actions.extend(
+                    client
+                        .reactions
+                        .into_iter()
+                        .map(|reaction| bindings::messaging::Action::React(reaction)),
+                );
+
+                actions
             }
         }
 
@@ -73,6 +81,7 @@ pub struct CommandClient {
     inbound_msg_room: String,
     inbound_msg_author: String,
     pub messages: Vec<(Recipient, String)>,
+    pub reactions: Vec<String>,
 }
 
 impl CommandClient {
@@ -81,6 +90,7 @@ impl CommandClient {
             inbound_msg_room: room,
             inbound_msg_author: author,
             messages: Default::default(),
+            reactions: Default::default(),
         }
     }
 
@@ -95,13 +105,21 @@ impl CommandClient {
     }
 
     /// Queues a message to be sent to the author of the original message.
-    pub fn respond(&mut self, msg: String) {
-        self.respond_to(msg, self.inbound_msg_author.clone())
+    pub fn respond(&mut self, msg: impl Into<String>) {
+        self.respond_to(msg.into(), self.inbound_msg_author.clone())
     }
 
     /// Queues a message to be sent to someone else.
     pub fn respond_to(&mut self, msg: String, author: String) {
         self.messages.push((Recipient(author), msg));
+    }
+
+    pub fn react_with(&mut self, reaction: String) {
+        self.reactions.push(reaction);
+    }
+
+    pub fn react_with_ok(&mut self) {
+        self.react_with("👌".to_owned());
     }
 }
 

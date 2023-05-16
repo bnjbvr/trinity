@@ -15,14 +15,12 @@ impl TrinityCommand for Component {
     }
 
     fn on_admin(client: &mut libcommand::CommandClient, cmd: &str) {
-        let mut msg = None;
-
         match cmd.split_once(" ") {
             Some(("set", r)) => {
                 if let Err(err) = wit_kv::set("secret", r) {
                     log::error!("ohnoes! error when setting the secret value: {err:#}");
                 } else {
-                    msg = Some("secret successfully set 👌".to_owned());
+                    client.react_with("👌".to_owned());
                 }
             }
 
@@ -32,21 +30,17 @@ impl TrinityCommand for Component {
                         log::error!("couldn't read secret: {err:#}");
                         None
                     });
-                    msg = Some(secret.unwrap_or_else(|| "<unset>".to_owned()));
+                    client.respond(secret.unwrap_or_else(|| "<unset>".to_owned()));
                 } else if cmd == "remove" {
                     if let Err(err) = wit_kv::remove("secret") {
                         log::error!("couldn't read value: {err:#}");
                     } else {
-                        msg = Some("secret successfully unset 🤯".to_owned());
+                        client.react_with("🤯".to_owned());
                     };
                 } else {
-                    msg = Some("i don't know this command??".to_owned());
+                    client.respond("i don't know this command??".to_owned());
                 }
             }
-        }
-
-        if let Some(msg) = msg {
-            client.respond(msg);
         }
     }
 

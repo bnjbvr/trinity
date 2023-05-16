@@ -1,4 +1,4 @@
-use libcommand::{CommandClient, TrinityCommand, impl_command};
+use libcommand::{impl_command, CommandClient, TrinityCommand};
 use wit_log as log;
 use wit_sync_request;
 
