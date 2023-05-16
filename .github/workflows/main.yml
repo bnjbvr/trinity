@@ -61,6 +61,11 @@ jobs:
           command: fmt
           args: --all --manifest-path ./modules/Cargo.toml -- --check
 
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install cargo-component
         working-directory: ./modules/
         run: |
