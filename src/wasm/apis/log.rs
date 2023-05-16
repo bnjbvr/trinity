@@ -1,8 +1,8 @@
 use crate::wasm::GuestState;
 
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/log.wit",
-    name: "logs"
+wasmtime::component::bindgen!({
+    path: "./wit/log.wit",
+    world: "log"
 });
 
 pub(super) struct LogApi {
@@ -24,7 +24,7 @@ impl LogApi {
     }
 }
 
-impl log::Log for LogApi {
+impl log::Host for LogApi {
     fn trace(&mut self, msg: String) -> anyhow::Result<()> {
         tracing::trace!("{} - {msg}", self.module_name);
         Ok(())

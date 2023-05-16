@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 log = { version = "0.4.17", features = ["std"] }
-wit-bindgen-guest-rust.workspace = true
+wit-bindgen.workspace = true
 
 [lib]

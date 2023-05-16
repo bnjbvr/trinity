@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use bindings::interface;
+use bindings::messaging;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use shlex;
@@ -164,7 +164,7 @@ impl Component {
     }
 }
 
-impl interface::Interface for Component {
+impl messaging::Messaging for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
@@ -230,9 +230,9 @@ impl interface::Interface for Component {
         author_id: String,
         _author_name: String,
         room: String,
-    ) -> Vec<interface::Message> {
+    ) -> Vec<messaging::Message> {
         if let Some(content) = Self::replace(&content, Self::get_room_config(&room)) {
-            vec![interface::Message {
+            vec![messaging::Message {
                 content,
                 to: author_id,
             }]
@@ -241,13 +241,13 @@ impl interface::Interface for Component {
         }
     }
 
-    fn admin(cmd: String, author: String, room: String) -> Vec<interface::Message> {
+    fn admin(cmd: String, author: String, room: String) -> Vec<messaging::Message> {
         let content = match Self::handle_admin(&cmd, &author, &room) {
             Ok(resp) => resp,
             Err(err) => err.to_string(),
         };
 
-        vec![interface::Message {
+        vec![messaging::Message {
             content,
             to: author,
         }]

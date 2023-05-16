@@ -1,7 +1,6 @@
 mod module {
-    wit_bindgen_host_wasmtime_rust::generate!({
-        default: "./wit/trinity-module.wit",
-        name: "interface"
+    wasmtime::component::bindgen!({
+        path: "./wit/trinity-module.wit",
     });
 }
 
@@ -25,7 +24,7 @@ pub(crate) struct GuestState {
 
 pub(crate) struct Module {
     name: String,
-    exports: module::Interface,
+    exports: module::TrinityModule,
     _instance: wasmtime::component::Instance,
 }
 
@@ -39,7 +38,7 @@ impl Module {
         store: impl AsContextMut<Data = GuestState>,
         topic: Option<&str>,
     ) -> anyhow::Result<String> {
-        self.exports.help(store, topic)
+        self.exports.messaging().call_help(store, topic)
     }
 
     pub fn admin(
@@ -48,8 +47,10 @@ impl Module {
         cmd: &str,
         sender: &UserId,
         room: &str,
-    ) -> anyhow::Result<Vec<module::Message>> {
-        self.exports.admin(store, cmd, sender.as_str(), room)
+    ) -> anyhow::Result<Vec<module::messaging::Message>> {
+        self.exports
+            .messaging()
+            .call_admin(store, cmd, sender.as_str(), room)
     }
 
     pub fn handle(
@@ -58,8 +59,8 @@ impl Module {
         content: &str,
         sender: &UserId,
         room: &RoomId,
-    ) -> anyhow::Result<Vec<module::Message>> {
-        self.exports.on_msg(
+    ) -> anyhow::Result<Vec<module::messaging::Message>> {
+        self.exports.messaging().call_on_msg(
             store,
             content,
             sender.as_str(),
@@ -136,10 +137,10 @@ impl WasmModules {
                 tracing::debug!("instantiating wasm component: {name}...");
 
                 let (exports, instance) =
-                    module::Interface::instantiate(&mut store, &component, &linker)?;
+                    module::TrinityModule::instantiate(&mut store, &component, &linker)?;
 
                 tracing::debug!("calling module's init function...");
-                exports.init(&mut store)?;
+                exports.messaging().call_init(&mut store)?;
 
                 tracing::debug!("great success!");
                 compiled_modules.push(Module {

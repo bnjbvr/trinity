@@ -1,9 +1,9 @@
-use bindings::interface;
+use bindings::messaging;
 use wit_log as log;
 
 struct Component;
 
-impl interface::Interface for Component {
+impl messaging::Messaging for Component {
     fn init() {
         let _ = log::set_boxed_logger(Box::new(log::WitLog::new()));
         log::set_max_level(log::LevelFilter::Trace);
@@ -19,11 +19,11 @@ impl interface::Interface for Component {
         _author_id: String,
         _author_name: String,
         _room: String,
-    ) -> Vec<interface::Message> {
+    ) -> Vec<messaging::Message> {
         Vec::new()
     }
 
-    fn admin(cmd: String, author_id: String, _room: String) -> Vec<interface::Message> {
+    fn admin(cmd: String, author_id: String, _room: String) -> Vec<messaging::Message> {
         let mut msg = None;
 
         match cmd.split_once(" ") {
@@ -55,7 +55,7 @@ impl interface::Interface for Component {
         }
 
         if let Some(msg) = msg {
-            vec![interface::Message {
+            vec![messaging::Message {
                 content: msg,
                 to: author_id,
             }]

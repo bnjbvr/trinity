@@ -42,7 +42,7 @@ already running on a server. It is also nice during development iterations on mo
 one can do the following to see changes in close to real-time:
 
 - run trinity with `cargo run`
-- `cd modules/ && cargo watch -x "component build --release"` in another terminal 
+- `cd modules/ && cargo watch -x "component build --target=wasm32-unknown-unknown --release"` in another terminal 
 
 The overall generic design is inspired from my previous bot,
 [botzilla](https://github.com/bnjbvr/botzilla), that was written in JavaScript and was very

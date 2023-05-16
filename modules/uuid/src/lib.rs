@@ -1,22 +1,15 @@
-use bindings::interface;
+use libcommand::{impl_command, CommandClient};
 
 struct Component;
 
-impl interface::Interface for Component {
-    fn init() {}
-
-    fn help(_topic: Option<String>) -> String {
+impl libcommand::TrinityCommand for Component {
+    fn on_help(_topic: Option<&str>) -> String {
         "Simple uuid generator".to_owned()
     }
 
-    fn on_msg(
-        content: String,
-        author_id: String,
-        _author_name: String,
-        _room: String,
-    ) -> Vec<interface::Message> {
+    fn on_msg(client: &mut CommandClient, content: &str) {
         if !content.starts_with("!uuid") {
-            return vec![];
+            return;
         }
 
         let r1 = wit_sys::rand_u64();
@@ -25,15 +18,8 @@ impl interface::Interface for Component {
 
         let content = format!("{uuid}");
 
-        vec![interface::Message {
-            content,
-            to: author_id,
-        }]
-    }
-
-    fn admin(_cmd: String, _author: String, _room: String) -> Vec<interface::Message> {
-        Vec::new()
+        client.respond(content);
     }
 }
 
-bindings::export!(Component);
+impl_command!(Component);

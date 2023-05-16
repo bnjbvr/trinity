@@ -15,11 +15,4 @@ wit-sync-request.workspace = true
 crate-type = ["cdylib"]
 
 [package.metadata.component]
-direct-export = "interface"
-
-[package.metadata.component.imports]
-log = "../../wit/log.wit"
-sync-request = "../../wit/sync-request.wit"
-
-[package.metadata.component.exports]
-interface = "../../wit/trinity-module.wit"
+target.path = "../../wit/trinity-module.wit"

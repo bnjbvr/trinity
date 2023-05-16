@@ -5,16 +5,11 @@ edition = "2021"
 
 [dependencies]
 uuid = "1.2.1"
-wit-sys = { workspace = true }
+wit-sys.workspace = true
+libcommand.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
 [package.metadata.component]
-direct-export = "interface"
-
-[package.metadata.component.imports]
-sys = "../../wit/sys.wit"
-
-[package.metadata.component.exports]
-interface = "../../wit/trinity-module.wit"
+target.path = "../../wit/trinity-module.wit"

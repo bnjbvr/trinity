@@ -1,8 +1,8 @@
 use crate::wasm::GuestState;
 
-wit_bindgen_host_wasmtime_rust::generate!({
-    import: "./wit/sync-request.wit",
-    name: "sync-request"
+wasmtime::component::bindgen!({
+    path: "./wit/sync-request.wit",
+    world: "sync-request"
 });
 
 use sync_request::*;
@@ -21,7 +21,7 @@ impl SyncRequestApi {
     }
 }
 
-impl sync_request::SyncRequest for SyncRequestApi {
+impl sync_request::Host for SyncRequestApi {
     fn run_request(&mut self, req: Request) -> anyhow::Result<Result<Response, ()>> {
         let url = req.url;
         let mut builder = match req.verb {

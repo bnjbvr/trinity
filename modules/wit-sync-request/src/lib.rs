@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 mod wit {
-    wit_bindgen_guest_rust::generate!({
-        import: "../../wit/sync-request.wit",
-        name: "sync-request"
-    });
+    wit_bindgen::generate!("sync-request" in "../../wit/sync-request.wit");
     pub use self::sync_request::*;
 }
 

@@ -1,10 +1,7 @@
 use anyhow::Context as _;
 
 mod wit {
-    wit_bindgen_guest_rust::generate!({
-        import: "../../wit/kv.wit",
-        name: "kv_store"
-    });
+    wit_bindgen::generate!("kv" in "../../wit/kv.wit");
     pub use self::kv::*;
 }
 
