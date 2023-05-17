@@ -15,6 +15,7 @@ use matrix_sdk::{
                 message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
             },
         },
+        presence::PresenceState,
         OwnedUserId, RoomId, UserId,
     },
     Client,
@@ -544,7 +545,48 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     // Note: this method will never return.
     let sync_settings = SyncSettings::default().token(client.sync_token().await.unwrap());
-    client.sync(sync_settings).await?;
+
+    tokio::select! {
+        _ = handle_signals() => {
+            // Exit :)
+        }
+
+        Err(err) = client.sync(sync_settings) => {
+            anyhow::bail!(err);
+        }
+    }
+
+    // Set bot presence to offline.
+    let request = matrix_sdk::ruma::api::client::presence::set_presence::v3::Request::new(
+        client.user_id().unwrap(),
+        PresenceState::Offline,
+    );
+
+    client.send(request, None).await?;
+
+    tracing::info!("properly exited, have a nice day!");
+    Ok(())
+}
+
+async fn handle_signals() -> anyhow::Result<()> {
+    use futures::StreamExt as _;
+    use signal_hook::consts::signal::*;
+    use signal_hook_tokio::*;
+
+    let mut signals = Signals::new(&[SIGINT, SIGHUP, SIGQUIT, SIGTERM])?;
+    let handle = signals.handle();
+
+    while let Some(signal) = signals.next().await {
+        match signal {
+            SIGINT | SIGHUP | SIGQUIT | SIGTERM => {
+                handle.close();
+                break;
+            }
+            _ => {
+                // Don't care.
+            }
+        }
+    }
 
     Ok(())
 }
