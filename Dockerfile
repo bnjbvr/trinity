@@ -14,11 +14,23 @@ COPY ./modules /build/modules/
 WORKDIR /build/src
 RUN cargo build --release
 
+# Set up protoc.
+ENV PROTOC_ZIP=protoc-23.0-linux-x86_64.zip
+
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v23.0/$PROTOC_ZIP && \
+    unzip -o $PROTOC_ZIP -d /usr/local bin/protoc && \
+    unzip -o $PROTOC_ZIP -d /usr/local 'include/*' && \
+    chmod +x /usr/local/bin/protoc && \
+    rm -f $PROTOC_ZIP
+
+ENV PROTOC=/usr/local/bin/protoc
+
 # Install the pinned version of cargo-component.
 WORKDIR /build/modules
 RUN ./install-cargo-component.sh && \
-    rustup component add rustfmt
-RUN cargo component build --target=wasm32-unknown-unknown --release
+    rustup component add rustfmt && \
+    rustup target add wasm32-unknown-unknown
+RUN cargo component build --target=wasm32-unknown-unknown
 
 # Actual image.
 FROM debian:bullseye-slim
@@ -32,7 +44,7 @@ RUN apt-get update && \
 
 COPY --from=builder /build/target/release/trinity /opt/trinity/trinity
 COPY --from=builder \
-    /build/modules/target/wasm32-unknown-unknown/release/*.wasm \
+    /build/modules/target/wasm32-unknown-unknown/debug/*.wasm \
     /opt/trinity/modules/target/wasm32-unknown-unknown/release
 
 ENV MATRIX_STORE_PATH /opt/trinity/data/cache
