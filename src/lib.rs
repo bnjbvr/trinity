@@ -174,6 +174,7 @@ impl App {
     }
 }
 
+/// Try to handle a message assuming it's an `!admin` command.
 fn try_handle_admin<'a>(
     content: &str,
     sender: &UserId,
@@ -181,8 +182,8 @@ fn try_handle_admin<'a>(
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
     room_resolver: &mut RoomResolver,
-) -> anyhow::Result<Option<Vec<wasm::Action>>> {
-    let Some(rest) = content.strip_prefix("!admin") else { return Ok(None) };
+) -> Option<Vec<wasm::Action>> {
+    let Some(rest) = content.strip_prefix("!admin") else { return None };
 
     tracing::trace!("trying admin for {content}");
 
@@ -213,25 +214,29 @@ fn try_handle_admin<'a>(
                     break;
                 }
             }
-            Ok(found)
+            found
         } else {
-            anyhow::bail!("missing command")
+            Some(vec![wasm::Action::Respond(wasm::Message {
+                text: "missing command".to_owned(),
+                html: None,
+                to: sender.to_string(),
+            })])
         }
     } else {
-        anyhow::bail!("missing module and command")
+        Some(vec![wasm::Action::Respond(wasm::Message {
+            text: "missing module and command".to_owned(),
+            html: None,
+            to: sender.to_string(),
+        })])
     }
-}
-
-struct Help {
-    text: String,
-    html: String,
 }
 
 fn try_handle_help<'a>(
     content: &str,
+    sender: &UserId,
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
-) -> Option<Help> {
+) -> Option<wasm::Action> {
     let Some(rest) = content.strip_prefix("!help") else { return None };
 
     // Special handling for help messages.
@@ -282,7 +287,11 @@ fn try_handle_help<'a>(
         return None;
     };
 
-    Some(Help { text: msg, html })
+    return Some(wasm::Action::Respond(wasm::Message {
+        text: msg,
+        html: Some(html),
+        to: sender.to_string(), // TODO rather room?
+    }));
 }
 
 enum AnyEvent {
@@ -340,10 +349,10 @@ async fn on_message(
         let ctx = ctx.inner.clone();
         let room_id = room.room_id().to_owned();
 
-        let new_events = tokio::task::spawn_blocking(move || {
-            let ctx = &mut *futures::executor::block_on(ctx.lock());
+        let event_id = ev.event_id().to_owned();
 
-            let mut outgoing_events = Vec::new();
+        let new_actions = tokio::task::spawn_blocking(move || {
+            let ctx = &mut *futures::executor::block_on(ctx.lock());
 
             let (store, modules) = ctx.modules.iter();
 
@@ -356,80 +365,57 @@ async fn on_message(
                     modules.clone(),
                     &mut ctx.room_resolver,
                 ) {
-                    Ok(None) => {}
-                    Ok(Some(actions)) => {
+                    None => {}
+                    Some(actions) => {
                         tracing::trace!("handled by admin, skipping modules");
-                        return actions
-                            .into_iter()
-                            .map(|a| match a {
-                                wasm::Action::Respond(msg) => AnyEvent::RoomMessage(
-                                    RoomMessageEventContent::text_plain(msg.content),
-                                ),
-                                wasm::Action::React(reaction) => {
-                                    let reaction = ReactionEventContent::new(Relation::new(
-                                        ev.event_id().to_owned(),
-                                        reaction,
-                                    ));
-                                    AnyEvent::Reaction(reaction)
-                                }
-                            })
-                            .collect();
-                    }
-                    Err(err) => {
-                        return vec![AnyEvent::RoomMessage(RoomMessageEventContent::text_plain(
-                            err.to_string(),
-                        ))]
+                        return actions;
                     }
                 }
             }
 
-            if let Some(help) = try_handle_help(&content, store, modules.clone()) {
+            if let Some(actions) = try_handle_help(&content, ev.sender(), store, modules.clone()) {
                 tracing::trace!("handled by help, skipping modules");
-                return vec![AnyEvent::RoomMessage(RoomMessageEventContent::text_html(
-                    help.text, help.html,
-                ))];
+                return vec![actions];
             }
 
             for module in modules {
                 tracing::trace!("trying to handle message with {}...", module.name());
-
                 match module.handle(&mut *store, &content, ev.sender(), &room_id) {
                     Ok(actions) => {
-                        let stop = !actions.is_empty();
-
-                        for action in actions {
-                            match action {
-                                wasm::Action::Respond(msg) => {
-                                    let text = RoomMessageEventContent::text_plain(msg.content);
-                                    // TODO take msg.to into consideration, don't always answer the whole room
-                                    outgoing_events.push(AnyEvent::RoomMessage(text));
-                                }
-                                wasm::Action::React(reaction) => {
-                                    let reaction = ReactionEventContent::new(Relation::new(
-                                        ev.event_id().to_owned(),
-                                        reaction,
-                                    ));
-                                    outgoing_events.push(AnyEvent::Reaction(reaction));
-                                }
-                            }
-                        }
-
-                        // TODO support handling the same message with several handlers.
-                        if stop {
+                        if !actions.is_empty() {
+                            // TODO support handling the same message with several handlers.
                             tracing::trace!("{} returned a response!", module.name());
-                            return outgoing_events;
+                            return actions;
                         }
                     }
-
                     Err(err) => {
-                        tracing::warn!("wasm module {} caused an error: {err}", module.name());
+                        tracing::warn!("wasm module {} ran into an error: {err}", module.name());
                     }
                 }
             }
 
-            outgoing_events
+            Vec::new()
         })
         .await?;
+
+        let new_events = new_actions
+            .into_iter()
+            .map(|a| match a {
+                wasm::Action::Respond(msg) => {
+                    let content = if let Some(html) = msg.html {
+                        RoomMessageEventContent::text_html(msg.text, html)
+                    } else {
+                        RoomMessageEventContent::text_plain(msg.text)
+                    };
+                    AnyEvent::RoomMessage(content)
+                }
+                wasm::Action::React(reaction) => {
+                    let reaction =
+                        ReactionEventContent::new(Relation::new(event_id.clone(), reaction));
+                    AnyEvent::Reaction(reaction)
+                }
+            })
+            .collect::<Vec<_>>();
 
         for event in new_events {
             event.send(&mut room).await?;
