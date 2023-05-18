@@ -5,6 +5,7 @@ mod module {
 }
 
 pub(crate) use module::messaging::Action;
+pub(crate) use module::messaging::Message;
 
 mod apis;
 
