@@ -30,7 +30,7 @@ WORKDIR /build/modules
 RUN ./install-cargo-component.sh && \
     rustup component add rustfmt && \
     rustup target add wasm32-unknown-unknown
-RUN cargo component build --target=wasm32-unknown-unknown
+RUN cargo component build --release --target=wasm32-unknown-unknown
 
 # Actual image.
 FROM debian:bullseye-slim
@@ -44,7 +44,7 @@ RUN apt-get update && \
 
 COPY --from=builder /build/target/release/trinity /opt/trinity/trinity
 COPY --from=builder \
-    /build/modules/target/wasm32-unknown-unknown/debug/*.wasm \
+    /build/modules/target/wasm32-unknown-unknown/release/*.wasm \
     /opt/trinity/modules/target/wasm32-unknown-unknown/release
 
 ENV MATRIX_STORE_PATH /opt/trinity/data/cache
