@@ -14,48 +14,14 @@
 #[macro_export]
 macro_rules! impl_command {
     ($ident:ident) => {
-        impl bindings::messaging::Messaging for $ident {
-            fn init() {
-                <Self as $crate::TrinityCommand>::init();
-            }
-
-            fn help(topic: Option<String>) -> String {
-                <Self as $crate::TrinityCommand>::on_help(topic.as_deref())
-            }
-
-            fn on_msg(
-                content: String,
-                author_id: String,
-                _author_name: String,
-                room: String,
-            ) -> Vec<bindings::messaging::Action> {
-                let mut client = $crate::CommandClient::new(room, author_id.clone());
-                <Self as $crate::TrinityCommand>::on_msg(&mut client, &content);
-                client
-                    .messages
-                    .into_iter()
-                    .map(|msg| {
-                        bindings::messaging::Action::Respond(bindings::messaging::Message {
-                            content: msg.1,
-                            to: msg.0 .0,
-                        })
-                    })
-                    .collect()
-            }
-
-            fn admin(
-                cmd: String,
-                author_id: String,
-                room: String,
-            ) -> Vec<bindings::messaging::Action> {
-                let mut client = $crate::CommandClient::new(room.clone(), author_id);
-                <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd);
-
+        const _: () = {
+            fn consume_client(client: $crate::CommandClient) -> Vec<bindings::messaging::Action> {
                 let mut actions = Vec::new();
 
                 actions.extend(client.messages.into_iter().map(|msg| {
                     bindings::messaging::Action::Respond(bindings::messaging::Message {
-                        content: msg.1,
+                        text: msg.1,
+                        html: None,
                         to: msg.0 .0,
                     })
                 }));
@@ -69,9 +35,40 @@ macro_rules! impl_command {
 
                 actions
             }
-        }
 
-        bindings::export!($ident);
+            impl bindings::messaging::Messaging for $ident {
+                fn init() {
+                    <Self as $crate::TrinityCommand>::init();
+                }
+
+                fn help(topic: Option<String>) -> String {
+                    <Self as $crate::TrinityCommand>::on_help(topic.as_deref())
+                }
+
+                fn on_msg(
+                    content: String,
+                    author_id: String,
+                    _author_name: String,
+                    room: String,
+                ) -> Vec<bindings::messaging::Action> {
+                    let mut client = $crate::CommandClient::new(room, author_id.clone());
+                    <Self as $crate::TrinityCommand>::on_msg(&mut client, &content);
+                    consume_client(client)
+                }
+
+                fn admin(
+                    cmd: String,
+                    author_id: String,
+                    room: String,
+                ) -> Vec<bindings::messaging::Action> {
+                    let mut client = $crate::CommandClient::new(room.clone(), author_id);
+                    <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd);
+                    consume_client(client)
+                }
+            }
+
+            bindings::export!($ident);
+        };
     };
 }
 

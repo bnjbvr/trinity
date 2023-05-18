@@ -1,6 +1,7 @@
 interface messaging {
     record message {
-        content: string,
+        text: string,
+        html: option<string>,
         to: string
     }
 
