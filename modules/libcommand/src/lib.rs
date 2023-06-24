@@ -137,7 +137,7 @@ pub trait TrinityCommand {
     /// Code that will be called once during initialization of the command. This is a good time to
     /// retrieve settings from the database and cache them locally, if needs be, or run any
     /// initialization code that shouldn't run on every message later.
-    fn init(_client: HashMap<String, String>) {}
+    fn init(_config: HashMap<String, String>) {}
 
     /// Handle a message received in a room where the bot is present.
     ///

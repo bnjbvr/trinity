@@ -148,21 +148,14 @@ impl WasmModules {
                     module::TrinityModule::instantiate(&mut store, &component, &linker)?;
 
                 // Convert the module config to Vec of tuples to satisfy wasm interface types.
-                let mc = modules_config.get(&name);
-                let mut module_config_list = Vec::new();
-                if mc.is_some() {
-                    for (key, value) in mc.unwrap().iter() {
-                        module_config_list.push((key.as_ref(), value.as_ref()))
-                    }
-                };
-
-                let mut init_config = None;
-                if module_config_list.len() > 0 {
-                    init_config = Some(module_config_list.as_slice());
-                }
+                let init_config: Option<Vec<(&str, &str)>> = modules_config
+                    .get(&name)
+                    .map(|mc| mc.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect());
 
                 tracing::debug!("calling module's init function...");
-                exports.messaging().call_init(&mut store, init_config)?;
+                exports
+                    .messaging()
+                    .call_init(&mut store, init_config.as_deref())?;
 
                 tracing::debug!("great success!");
                 compiled_modules.push(Module {
