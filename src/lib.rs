@@ -534,7 +534,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
             .context("writing new device_id into the database")?;
     }
 
-    let modules_config = config.modules_config.unwrap_or(HashMap::new());
+    let modules_config = config.modules_config.unwrap_or_else(HashMap::new);
 
     client
         .user_id()
