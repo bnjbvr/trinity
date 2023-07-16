@@ -77,7 +77,9 @@ ideas, please go ahead :)
 - ask what's the weather in some city, is it going to rain in the next hour, etc.
 - YOUR BILLION DOLLARS IDEA HERE
 
-## Deploy with Docker
+## Deploying
+
+### Docker
 
 If you want, you can use the image published on Docker
 ([bnjbvr/trinity](https://hub.docker.com/repository/docker/bnjbvr/trinity)) -- it might be lagging
@@ -101,9 +103,11 @@ docker run -e HOMESERVER="matrix.example.com" \
 Data is saved in the `/opt/trinity/data` directory, and it is recommended to make it a volume so as
 to be able to decrypt messages over multiple sessions and so on.
 
+### Custom Modules
+
 If you want, you can specify a custom modules directory using the `MODULES_PATHS` environment
 variable and adding another data volume for it. This can be useful for hacking modules only without
-having to compile the host runtime. Here's how you can do that:
+having to compile the host runtime. Here's an example using Docker:
 
 ```
 docker run -e HOMESERVER="matrix.example.com" \
@@ -115,6 +119,40 @@ docker run -e HOMESERVER="matrix.example.com" \
     -v /host/path/to/modules:/wasm-modules \
     -ti bnjbvr/trinity
 ```
+
+### Configuration
+
+Trinity can be configured via config file. The config file can be passed in from the command line:
+
+```bash
+cargo run -- config.toml
+```
+
+Or it can be placed in `$XDG_CONFIG_HOME`, typically `~/.config/trinity/config.toml` on XDG
+compliant systems. Configuration lives in the document root, for example:
+
+```toml
+home_server = "matrix.example.com"
+user_id = "@trinity:example.com"
+password = "hunter2"
+matrix_store_path = "/path/to/store"
+redb_path = "/path/to/redb"
+admin_user_id = "@admin:example.com"
+modules_path = ["/wasm-modules"]
+```
+
+### Module Configuration
+
+It's also possible to pass arbitrary configuration down to specific modules in the config
+file. For example:
+
+```toml
+[modules_config.pun]
+format = "image"
+```
+
+This passes the object `{"format": "image"}` to the `pun` module's `init` function. It's
+up to specific modules to handle this configuration.
 
 ## Is it any good?
 
