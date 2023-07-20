@@ -213,7 +213,9 @@ fn try_handle_admin<'a>(
     modules: impl Clone + Iterator<Item = &'a Module>,
     room_resolver: &mut RoomResolver,
 ) -> Option<Vec<wasm::Action>> {
-    let Some(rest) = content.strip_prefix("!admin") else { return None };
+    let Some(rest) = content.strip_prefix("!admin") else {
+        return None;
+    };
 
     tracing::trace!("trying admin for {content}");
 
@@ -267,7 +269,9 @@ fn try_handle_help<'a>(
     store: &mut wasmtime::Store<GuestState>,
     modules: impl Clone + Iterator<Item = &'a Module>,
 ) -> Option<wasm::Action> {
-    let Some(rest) = content.strip_prefix("!help") else { return None };
+    let Some(rest) = content.strip_prefix("!help") else {
+        return None;
+    };
 
     // Special handling for help messages.
     let (msg, html) = if rest.trim().is_empty() {
