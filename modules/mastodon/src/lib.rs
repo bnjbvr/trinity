@@ -44,7 +44,9 @@ impl TrinityCommand for Component {
     }
 
     fn on_msg(client: &mut CommandClient, content: &str) {
-        let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else { return };
+        let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
+            return;
+        };
 
         let author_id = client.from();
         let content: &str = &content;
@@ -102,8 +104,12 @@ impl TrinityCommand for Component {
             // Format: set-config BASE_URL TOKEN
             let mut split = rest.trim().split_whitespace();
 
-            let Some(base_url) = split.next() else { return client.respond("missing base url"); };
-            let Some(token) = split.next() else { return client.respond("missing token") };
+            let Some(base_url) = split.next() else {
+                return client.respond("missing base url");
+            };
+            let Some(token) = split.next() else {
+                return client.respond("missing token");
+            };
 
             let config = RoomConfig {
                 admins: vec![sender.to_owned()],
@@ -131,7 +137,9 @@ impl TrinityCommand for Component {
             // Format: allow USER_ID
             let mut split = rest.trim().split_whitespace();
 
-            let Some(user_id) = split.next() else { return client.respond("missing user id") };
+            let Some(user_id) = split.next() else {
+                return client.respond("missing user id");
+            };
 
             let Ok(Some(mut current)) = wit_kv::get::<_, RoomConfig>(&room) else {
                 return client.respond("couldn't read room config for room");
@@ -150,7 +158,9 @@ impl TrinityCommand for Component {
             // Format: disallow USER_ID
             let mut split = rest.trim().split_whitespace();
 
-            let Some(user_id) = split.next() else { return client.respond("missing user id") };
+            let Some(user_id) = split.next() else {
+                return client.respond("missing user id");
+            };
 
             let Ok(Some(mut current)) = wit_kv::get::<_, RoomConfig>(&room) else {
                 return client.respond("couldn't read room config for room");

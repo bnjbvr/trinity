@@ -15,30 +15,28 @@ jobs:
       matrix:
         rust:
           - stable
-          - nightly
+          #- nightly
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@v1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
           override: true
-          components: clippy, rustfmt
+          components: rustfmt
 
-      - uses: Swatinem/rust-cache@v1
+      - name: Load cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Format host
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: |
+          cargo fmt --all -- --check
 
       - name: Check host
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --verbose
+        run: |
+          cargo check --all --verbose
 
   ci-modules:
     env:
@@ -48,18 +46,23 @@ jobs:
       matrix:
         rust:
           - stable
-          - nightly
+          #- nightly
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: Swatinem/rust-cache@v1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          override: true
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Format modules
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all --manifest-path ./modules/Cargo.toml -- --check
+        run: |
+          cargo fmt --all --manifest-path ./modules/Cargo.toml -- --check
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
@@ -69,7 +72,7 @@ jobs:
       - name: Install cargo-component
         working-directory: ./modules/
         run: |
-          rustup update
+          #rustup update
           cargo component --version || ./install-cargo-component.sh
 
       - name: Check modules
