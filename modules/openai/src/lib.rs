@@ -26,7 +26,9 @@ const OPEN_AI_URL: &str = "https://api.openai.com/v1/completions";
 
 impl Component {
     fn handle_msg(content: &str, room: &str) -> anyhow::Result<Option<String>> {
-        let Some(config) = wit_kv::get::<_, RoomConfig>(room)? else { return Ok(None); };
+        let Some(config) = wit_kv::get::<_, RoomConfig>(room)? else {
+            return Ok(None);
+        };
 
         match config.trigger {
             TriggerMode::Always => {}
@@ -90,7 +92,9 @@ impl Component {
     fn handle_admin(cmd: &str, room: &str) -> anyhow::Result<String> {
         if let Some(rest) = cmd.strip_prefix("enable") {
             // Format: set-config TOKEN TRIGGER_MODE
-            let Some((token, trigger)) = rest.trim().split_once(' ') else { anyhow::bail!("missing token or trigger mode"); };
+            let Some((token, trigger)) = rest.trim().split_once(' ') else {
+                anyhow::bail!("missing token or trigger mode");
+            };
 
             let trigger = match trigger.trim() {
                 "always" => TriggerMode::Always,
