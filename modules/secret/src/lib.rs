@@ -51,4 +51,4 @@ impl TrinityCommand for Component {
     }
 }
 
-impl_command!(Component);
+impl_command!();

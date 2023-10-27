@@ -4,8 +4,9 @@ mod module {
     });
 }
 
-pub(crate) use module::messaging::Action;
-pub(crate) use module::messaging::Message;
+use crate::wasm::module::exports::trinity::module::messaging;
+pub(crate) use messaging::Action;
+pub(crate) use messaging::Message;
 
 mod apis;
 
@@ -42,7 +43,9 @@ impl Module {
         store: impl AsContextMut<Data = GuestState>,
         topic: Option<&str>,
     ) -> anyhow::Result<String> {
-        self.exports.messaging().call_help(store, topic)
+        self.exports
+            .trinity_module_messaging()
+            .call_help(store, topic)
     }
 
     pub fn admin(
@@ -51,9 +54,9 @@ impl Module {
         cmd: &str,
         sender: &UserId,
         room: &str,
-    ) -> anyhow::Result<Vec<module::messaging::Action>> {
+    ) -> anyhow::Result<Vec<messaging::Action>> {
         self.exports
-            .messaging()
+            .trinity_module_messaging()
             .call_admin(store, cmd, sender.as_str(), room)
     }
 
@@ -63,8 +66,8 @@ impl Module {
         content: &str,
         sender: &UserId,
         room: &RoomId,
-    ) -> anyhow::Result<Vec<module::messaging::Action>> {
-        self.exports.messaging().call_on_msg(
+    ) -> anyhow::Result<Vec<messaging::Action>> {
+        self.exports.trinity_module_messaging().call_on_msg(
             store,
             content,
             sender.as_str(),
@@ -148,13 +151,13 @@ impl WasmModules {
                     module::TrinityModule::instantiate(&mut store, &component, &linker)?;
 
                 // Convert the module config to Vec of tuples to satisfy wasm interface types.
-                let init_config: Option<Vec<(&str, &str)>> = modules_config
+                let init_config: Option<Vec<(String, String)>> = modules_config
                     .get(&name)
-                    .map(|mc| mc.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect());
+                    .map(|mc| Vec::from_iter(mc.clone()));
 
                 tracing::debug!("calling module's init function...");
                 exports
-                    .messaging()
+                    .trinity_module_messaging()
                     .call_init(&mut store, init_config.as_deref())?;
 
                 tracing::debug!("great success!");

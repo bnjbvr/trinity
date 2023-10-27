@@ -1,8 +1,9 @@
+use crate::wasm::apis::sync_request::trinity::api::sync_request;
 use crate::wasm::GuestState;
 
 wasmtime::component::bindgen!({
     path: "./wit/sync-request.wit",
-    world: "sync-request"
+    world: "sync-request-world"
 });
 
 use sync_request::*;

@@ -1,3 +1,5 @@
+package trinity:module;
+
 interface messaging {
     record message {
         text: string,
@@ -5,19 +7,19 @@ interface messaging {
         to: string
     }
 
-    type reaction = string
+    type reaction = string;
 
     variant action {
         respond(message),
         react(reaction)
     }
 
-    init: func(config: option<list<tuple<string, string>>>)
-    help: func(topic: option<string>) -> string
-    admin: func(cmd: string, author-id: string, room: string) -> list<action>
-    on-msg: func(content: string, author-id: string, author-name: string, room: string) -> list<action>
+    init: func(config: option<list<tuple<string, string>>>);
+    help: func(topic: option<string>) -> string;
+    admin: func(cmd: string, author-id: string, room: string) -> list<action>;
+    on-msg: func(content: string, author-id: string, author-name: string, room: string) -> list<action>;
 }
 
-default world trinity-module {
-    export messaging: self.messaging
+world trinity-module {
+    export messaging;
 }

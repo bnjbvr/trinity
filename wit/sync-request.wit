@@ -1,3 +1,5 @@
+package trinity:api;
+
 interface sync-request {
     enum request-verb {
         get, put, delete, post
@@ -24,9 +26,9 @@ interface sync-request {
         body: option<string>,
     }
 
-    run-request: func(req: request) -> result<response>
+    run-request: func(req: request) -> result<response>;
 }
 
-default world sync-request-world {
-    import sync-request: self.sync-request
+world sync-request-world {
+    import sync-request
 }

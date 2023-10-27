@@ -7,6 +7,7 @@ edition = "2021"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.87"
 
+cargo-component-bindings.workspace = true
 libcommand.workspace = true
 wit-log.workspace = true
 wit-sync-request.workspace = true
