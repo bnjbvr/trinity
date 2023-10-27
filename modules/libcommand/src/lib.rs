@@ -10,20 +10,26 @@
 //! - Because of that, I've had to put most of the code, including the whole `impl Interface for X`
 //! block, in the macro body. It's ugly and not practical for maintainability purposes.
 
+pub use cargo_component_bindings;
+
 use std::collections::HashMap;
 
 /// Implements a command for a given type, assuming the type implements the `TrinityCommand` trait.
 #[macro_export]
 macro_rules! impl_command {
-    ($ident:ident) => {
+    () => {
         const _: () = {
+            // Generates the bindings module.
+            $crate::cargo_component_bindings::generate!();
+
+            use bindings::exports::trinity::module;
             use std::collections::HashMap;
 
-            fn consume_client(client: $crate::CommandClient) -> Vec<bindings::messaging::Action> {
+            fn consume_client(client: $crate::CommandClient) -> Vec<module::messaging::Action> {
                 let mut actions = Vec::new();
 
                 actions.extend(client.messages.into_iter().map(|msg| {
-                    bindings::messaging::Action::Respond(bindings::messaging::Message {
+                    module::messaging::Action::Respond(module::messaging::Message {
                         text: msg.1,
                         html: None,
                         to: msg.0 .0,
@@ -34,13 +40,13 @@ macro_rules! impl_command {
                     client
                         .reactions
                         .into_iter()
-                        .map(|reaction| bindings::messaging::Action::React(reaction)),
+                        .map(|reaction| module::messaging::Action::React(reaction)),
                 );
 
                 actions
             }
 
-            impl bindings::messaging::Messaging for $ident {
+            impl module::messaging::Guest for Component {
                 fn init(config: Option<Vec<(String, String)>>) {
                     // Convert the Vec of tuples to a HashMap for convenience.
                     let config = match config {
@@ -63,7 +69,7 @@ macro_rules! impl_command {
                     author_id: String,
                     _author_name: String,
                     room: String,
-                ) -> Vec<bindings::messaging::Action> {
+                ) -> Vec<module::messaging::Action> {
                     let mut client = $crate::CommandClient::new(room, author_id.clone());
                     <Self as $crate::TrinityCommand>::on_msg(&mut client, &content);
                     consume_client(client)
@@ -73,14 +79,12 @@ macro_rules! impl_command {
                     cmd: String,
                     author_id: String,
                     room: String,
-                ) -> Vec<bindings::messaging::Action> {
+                ) -> Vec<module::messaging::Action> {
                     let mut client = $crate::CommandClient::new(room.clone(), author_id);
                     <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd);
                     consume_client(client)
                 }
             }
-
-            bindings::export!($ident);
         };
     };
 }

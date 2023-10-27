@@ -1,8 +1,9 @@
+use crate::wasm::apis::log::trinity::api::log;
 use crate::wasm::GuestState;
 
 wasmtime::component::bindgen!({
     path: "./wit/log.wit",
-    world: "log"
+    world: "log-world"
 });
 
 pub(super) struct LogApi {

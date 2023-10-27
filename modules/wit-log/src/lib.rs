@@ -1,6 +1,7 @@
-wit_bindgen::generate!("log" in "../../wit/log.wit");
+wit_bindgen::generate!("log-world" in "../../wit/log.wit");
 
 pub use ::log::*;
+use trinity::api::log;
 
 /// A log implementation based on calls to the host.
 pub struct WitLog {

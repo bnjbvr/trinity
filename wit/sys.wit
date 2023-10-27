@@ -1,7 +1,9 @@
+package trinity:api;
+
 interface sys {
-    rand-u64: func() -> u64
+    rand-u64: func() -> u64;
 }
 
-default world sys-world {
-    import sys: self.sys
+world sys-world {
+    import sys;
 }

@@ -1,10 +1,11 @@
 use redb::{ReadableTable as _, TableDefinition};
 
+use crate::wasm::apis::kv_store::trinity::api::kv;
 use crate::{wasm::GuestState, ShareableDatabase};
 
 wasmtime::component::bindgen!({
     path: "./wit/kv.wit",
-    world: "kv"
+    world: "kv-world"
 });
 
 pub(super) struct KeyValueStoreApi {

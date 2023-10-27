@@ -5,8 +5,10 @@ edition = "2021"
 
 [dependencies]
 uuid = "1.2.1"
-wit-sys.workspace = true
+
+cargo-component-bindings.workspace = true
 libcommand.workspace = true
+wit-sys.workspace = true
 
 [lib]
 crate-type = ["cdylib"]

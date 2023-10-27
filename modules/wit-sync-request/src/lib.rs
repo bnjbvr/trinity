@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 mod wit {
-    wit_bindgen::generate!("sync-request" in "../../wit/sync-request.wit");
-    pub use self::sync_request::*;
+    wit_bindgen::generate!("sync-request-world" in "../../wit/sync-request.wit");
+    pub use self::trinity::api::sync_request::*;
 }
 
 pub use wit::ResponseStatus;
@@ -71,15 +71,15 @@ impl Request {
     pub fn run(self) -> Result<wit::Response, ()> {
         let headers: Vec<_> = self
             .headers
-            .iter()
+            .into_iter()
             .map(|(key, value)| wit::RequestHeader { key, value })
             .collect();
         let req = wit::Request {
             verb: self.verb,
-            url: &self.url,
-            headers: &headers,
-            body: self.body.as_deref(),
+            url: self.url,
+            headers,
+            body: self.body,
         };
-        wit::run_request(req)
+        wit::run_request(&req)
     }
 }

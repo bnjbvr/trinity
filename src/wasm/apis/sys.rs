@@ -1,8 +1,9 @@
+use crate::wasm::apis::sys::trinity::api::sys;
 use crate::wasm::GuestState;
 
 wasmtime::component::bindgen!({
     path: "./wit/sys.wit",
-    world: "sys"
+    world: "sys-world"
 });
 
 pub(super) struct SysApi;
