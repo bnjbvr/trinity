@@ -28,6 +28,7 @@ use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
+use tracing::{debug, error, info, trace, warn};
 use wasm::{GuestState, Module, WasmModules};
 
 use crate::admin_table::DEVICE_ID_ENTRY;
@@ -71,7 +72,7 @@ impl BotConfig {
         let contents = fs::read_to_string(&config_path)?;
         let config: BotConfig = toml::from_str(&contents)?;
 
-        tracing::trace!("Using configuration from {config_path}");
+        debug!("Using configuration from {config_path}");
         Ok(config)
     }
 
@@ -112,7 +113,7 @@ impl BotConfig {
             .collect::<anyhow::Result<Vec<_>>>()
             .context("a module path isn't valid")?;
 
-        tracing::trace!("Using configuration from environment");
+        debug!("Using configuration from environment");
         Ok(Self {
             home_server,
             user_id,
@@ -179,10 +180,10 @@ impl AppCtx {
             match WasmModules::new(ptr.db.clone(), &ptr.modules_paths, &ptr.modules_config) {
                 Ok(modules) => {
                     ptr.modules = modules;
-                    tracing::info!("successful hot reload!");
+                    info!("successful hot reload!");
                 }
                 Err(err) => {
-                    tracing::error!("hot reload failed: {err:#}");
+                    error!("hot reload failed: {err:#}");
                 }
             }
 
@@ -217,7 +218,7 @@ fn try_handle_admin<'a>(
         return None;
     };
 
-    tracing::trace!("trying admin for {content}");
+    trace!("trying admin for {content}");
 
     if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
@@ -239,7 +240,7 @@ fn try_handle_admin<'a>(
                     found = match m.admin(&mut *store, rest.trim(), sender, target_room.as_str()) {
                         Ok(actions) => Some(actions),
                         Err(err) => {
-                            tracing::error!("error when handling admin command: {err:#}");
+                            error!("error when handling admin command: {err:#}");
                             None
                         }
                     };
@@ -281,7 +282,7 @@ fn try_handle_help<'a>(
             let help = match m.help(&mut *store, None) {
                 Ok(msg) => Some(msg),
                 Err(err) => {
-                    tracing::error!("error when handling help command: {err:#}");
+                    error!("error when handling help command: {err:#}");
                     None
                 }
             }
@@ -369,7 +370,7 @@ async fn on_message(
             return Ok(());
         };
 
-        tracing::trace!(
+        trace!(
             "Received a message from {} in {}: {}",
             ev.sender(),
             room.room_id(),
@@ -401,29 +402,29 @@ async fn on_message(
                 ) {
                     None => {}
                     Some(actions) => {
-                        tracing::trace!("handled by admin, skipping modules");
+                        trace!("handled by admin, skipping modules");
                         return actions;
                     }
                 }
             }
 
             if let Some(actions) = try_handle_help(&content, ev.sender(), store, modules.clone()) {
-                tracing::trace!("handled by help, skipping modules");
+                trace!("handled by help, skipping modules");
                 return vec![actions];
             }
 
             for module in modules {
-                tracing::trace!("trying to handle message with {}...", module.name());
+                trace!("trying to handle message with {}...", module.name());
                 match module.handle(&mut *store, &content, ev.sender(), &room_id) {
                     Ok(actions) => {
                         if !actions.is_empty() {
                             // TODO support handling the same message with several handlers.
-                            tracing::trace!("{} returned a response!", module.name());
+                            trace!("{} returned a response!", module.name());
                             return actions;
                         }
                     }
                     Err(err) => {
-                        tracing::warn!("wasm module {} ran into an error: {err}", module.name());
+                        warn!("wasm module {} ran into an error: {err}", module.name());
                     }
                 }
             }
@@ -477,14 +478,14 @@ async fn on_stripped_state_member(
         // wait for the sync to return the new room state so we need to spawn
         // a new task for them.
         tokio::spawn(async move {
-            tracing::debug!("Autojoining room {}", room.room_id());
+            debug!("Autojoining room {}", room.room_id());
             let mut delay = 1;
 
             while let Err(err) = room.accept_invitation().await {
                 // retry autojoin due to synapse sending invites, before the
                 // invited user can join for more information see
                 // https://github.com/matrix-org/synapse/issues/4345
-                tracing::warn!(
+                warn!(
                     "Failed to join room {} ({err:?}), retrying in {delay}s",
                     room.room_id()
                 );
@@ -493,12 +494,12 @@ async fn on_stripped_state_member(
                 delay *= 2;
 
                 if delay > 3600 {
-                    tracing::error!("Can't join room {} ({err:?})", room.room_id());
+                    error!("Can't join room {} ({err:?})", room.room_id());
                     break;
                 }
             }
 
-            tracing::debug!("Successfully joined room {}", room.room_id());
+            debug!("Successfully joined room {}", room.room_id());
         });
     }
 }
@@ -515,14 +516,14 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let db = Arc::new(unsafe { redb::Database::create(config.redb_path, 1024 * 1024)? });
 
     // First we need to log in.
-    tracing::debug!("logging in...");
+    debug!("logging in...");
     let mut login_builder = client.login_username(&config.user_id, &config.password);
 
     let mut db_device_id = None;
     if let Some(device_id) = admin_table::read_str(&db, DEVICE_ID_ENTRY)
         .context("reading device_id from the database")?
     {
-        tracing::trace!("reusing previous device_id...");
+        trace!("reusing previous device_id...");
         // the login builder keeps a reference to the previous device id string, so can't clone
         // db_device_id here, it has to outlive the login_builder.
         db_device_id = Some(device_id);
@@ -533,7 +534,12 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     let resp_device_id = resp.device_id.to_string();
     if db_device_id.as_ref() != Some(&resp_device_id) {
-        tracing::trace!("storign new device_id...");
+        match db_device_id {
+            Some(prev) => {
+                warn!("overriding device_id (previous was {prev}, new is {resp_device_id})")
+            }
+            None => debug!("storing new device_id for the first time..."),
+        }
         admin_table::write_str(&db, DEVICE_ID_ENTRY, &resp_device_id)
             .context("writing new device_id into the database")?;
     }
@@ -547,10 +553,10 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     // An initial sync to set up state and so our bot doesn't respond to old
     // messages. If the `StateStore` finds saved state in the location given the
     // initial sync will be skipped in favor of loading state from the store
-    tracing::debug!("starting initial sync...");
+    debug!("starting initial sync...");
     client.sync_once(SyncSettings::default()).await.unwrap();
 
-    tracing::debug!("setting up app...");
+    debug!("setting up app...");
     let client_copy = client.clone();
     let app_ctx = tokio::task::spawn_blocking(|| {
         AppCtx::new(
@@ -566,7 +572,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     let _watcher_guard = watcher(app.inner.clone()).await?;
 
-    tracing::debug!("setup ready! now listening to incoming messages.");
+    debug!("setup ready! now listening to incoming messages.");
     client.add_event_handler_context(app);
     client.add_event_handler(on_message);
     client.add_event_handler(on_stripped_state_member);
@@ -592,7 +598,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     client.send(request, None).await?;
 
-    tracing::info!("properly exited, have a nice day!");
+    info!("properly exited, have a nice day!");
     Ok(())
 }
 
@@ -624,7 +630,7 @@ async fn watcher(app: Arc<Mutex<AppCtx>>) -> anyhow::Result<Vec<notify::Recommen
 
     let mut watchers = Vec::with_capacity(modules_paths.len());
     for modules_path in modules_paths {
-        tracing::debug!(
+        debug!(
             "setting up watcher on @ {}...",
             modules_path.to_string_lossy()
         );
@@ -660,7 +666,7 @@ async fn watcher(app: Arc<Mutex<AppCtx>>) -> anyhow::Result<Vec<notify::Recommen
                         | notify::EventKind::Other => {}
                     }
                 }
-                Err(e) => tracing::warn!("watch error: {e:?}"),
+                Err(e) => warn!("watch error: {e:?}"),
             },
         )?;
 
@@ -668,6 +674,6 @@ async fn watcher(app: Arc<Mutex<AppCtx>>) -> anyhow::Result<Vec<notify::Recommen
         watchers.push(watcher);
     }
 
-    tracing::debug!("watcher setup done!");
+    debug!("watcher setup done!");
     Ok(watchers)
 }
