@@ -31,6 +31,14 @@ pub fn read(db: &ShareableDatabase, key: &str) -> anyhow::Result<Option<Vec<u8>>
     Ok(table.get(key)?.map(|val| val.to_vec()))
 }
 
+/// Same as [`read`], but for a string value.
+pub fn read_str(db: &ShareableDatabase, key: &str) -> anyhow::Result<Option<String>> {
+    match read(db, key)? {
+        Some(bytes) => Ok(Some(String::from_utf8(bytes)?)),
+        None => Ok(None),
+    }
+}
+
 /// Writes a given key in the admin table from the database.
 pub fn write(db: &ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<()> {
     let txn = db.begin_write()?;
@@ -40,4 +48,9 @@ pub fn write(db: &ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<
     }
     txn.commit()?;
     Ok(())
+}
+
+/// Same as [`write`], but for a string ref.
+pub fn write_str(db: &ShareableDatabase, key: &str, value: &str) -> anyhow::Result<()> {
+    write(db, key, value.as_bytes())
 }

@@ -519,13 +519,13 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let mut login_builder = client.login_username(&config.user_id, &config.password);
 
     let mut db_device_id = None;
-    if let Some(device_id) =
-        admin_table::read(&db, DEVICE_ID_ENTRY).context("reading device_id from the database")?
+    if let Some(device_id) = admin_table::read_str(&db, DEVICE_ID_ENTRY)
+        .context("reading device_id from the database")?
     {
         tracing::trace!("reusing previous device_id...");
         // the login builder keeps a reference to the previous device id string, so can't clone
         // db_device_id here, it has to outlive the login_builder.
-        db_device_id = Some(String::from_utf8(device_id)?);
+        db_device_id = Some(device_id);
         login_builder = login_builder.device_id(db_device_id.as_ref().unwrap());
     }
 
@@ -534,7 +534,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let resp_device_id = resp.device_id.to_string();
     if db_device_id.as_ref() != Some(&resp_device_id) {
         tracing::trace!("storign new device_id...");
-        admin_table::write(&db, DEVICE_ID_ENTRY, resp_device_id.as_bytes())
+        admin_table::write_str(&db, DEVICE_ID_ENTRY, &resp_device_id)
             .context("writing new device_id into the database")?;
     }
 
