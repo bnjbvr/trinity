@@ -1,7 +1,7 @@
 # Build image.
 
-FROM rust:1.68 AS builder
-LABEL maintainer="Benjamin Bouvier <public@benj.me>"
+FROM rust:1.83 AS builder
+LABEL maintainer="Benjamin Bouvier <benjamin@bouvier.cc>"
 
 RUN mkdir -p /build/modules
 
