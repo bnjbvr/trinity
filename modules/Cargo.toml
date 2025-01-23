@@ -19,9 +19,9 @@ members = [
 ]
 
 [workspace.dependencies]
-cargo-component-bindings = "0.4.0"
+cargo-component-bindings = "0.6.0"
 libcommand = { path = "./libcommand" }
-wit-bindgen = "0.13.0"
+wit-bindgen = "0.38.0"
 wit-log = { path = "./wit-log" }
 wit-sys = { path = "./wit-sys" }
 wit-sync-request = { path = "./wit-sync-request" }

@@ -3,3 +3,4 @@ target/
 trinity.db
 cache/
 data/
+modules/**/src/bindings.rs

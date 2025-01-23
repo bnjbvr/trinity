@@ -23,7 +23,7 @@ impl SyncRequestApi {
 }
 
 impl sync_request::Host for SyncRequestApi {
-    fn run_request(&mut self, req: Request) -> anyhow::Result<Result<Response, ()>> {
+    fn run_request(&mut self, req: Request) -> Result<Response, RunRequestError> {
         let url = req.url;
         let mut builder = match req.verb {
             RequestVerb::Get => self.client.get(url),
@@ -37,9 +37,14 @@ impl sync_request::Host for SyncRequestApi {
         if let Some(body) = req.body {
             builder = builder.body(body);
         }
-        let req = builder.build()?;
+        let req = builder
+            .build()
+            .map_err(|err| RunRequestError::Builder(err.to_string()))?;
 
-        let resp = self.client.execute(req)?;
+        let resp = self
+            .client
+            .execute(req)
+            .map_err(|err| RunRequestError::Execute(err.to_string()))?;
 
         let status = match resp.status().as_u16() / 100 {
             2 => ResponseStatus::Success,
@@ -48,6 +53,6 @@ impl sync_request::Host for SyncRequestApi {
 
         let body = resp.text().ok();
 
-        Ok(Ok(Response { status, body }))
+        Ok(Response { status, body })
     }
 }

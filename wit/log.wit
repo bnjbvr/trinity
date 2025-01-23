@@ -9,5 +9,5 @@ interface log {
 }
 
 world log-world {
-    import log
+    import log;
 }

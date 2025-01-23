@@ -20,30 +20,25 @@ impl LogApi {
     pub fn link(
         id: usize,
         linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> anyhow::Result<()> {
+    ) -> wasmtime::Result<()> {
         log::add_to_linker(linker, move |s| &mut s.imports[id].apis.log)
     }
 }
 
 impl log::Host for LogApi {
-    fn trace(&mut self, msg: String) -> anyhow::Result<()> {
+    fn trace(&mut self, msg: String) {
         tracing::trace!("{} - {msg}", self.module_name);
-        Ok(())
     }
-    fn debug(&mut self, msg: String) -> anyhow::Result<()> {
+    fn debug(&mut self, msg: String) {
         tracing::debug!("{} - {msg}", self.module_name);
-        Ok(())
     }
-    fn info(&mut self, msg: String) -> anyhow::Result<()> {
+    fn info(&mut self, msg: String) {
         tracing::info!("{} - {msg}", self.module_name);
-        Ok(())
     }
-    fn warn(&mut self, msg: String) -> anyhow::Result<()> {
+    fn warn(&mut self, msg: String) {
         tracing::warn!("{} - {msg}", self.module_name);
-        Ok(())
     }
-    fn error(&mut self, msg: String) -> anyhow::Result<()> {
+    fn error(&mut self, msg: String) {
         tracing::error!("{} - {msg}", self.module_name);
-        Ok(())
     }
 }

@@ -7,6 +7,7 @@ mod module {
 use crate::wasm::module::exports::trinity::module::messaging;
 pub(crate) use messaging::Action;
 pub(crate) use messaging::Message;
+use module::TrinityModule;
 
 mod apis;
 
@@ -29,8 +30,7 @@ pub(crate) struct GuestState {
 
 pub(crate) struct Module {
     name: String,
-    exports: module::TrinityModule,
-    _instance: wasmtime::component::Instance,
+    instance: TrinityModule,
 }
 
 impl Module {
@@ -43,7 +43,7 @@ impl Module {
         store: impl AsContextMut<Data = GuestState>,
         topic: Option<&str>,
     ) -> anyhow::Result<String> {
-        self.exports
+        self.instance
             .trinity_module_messaging()
             .call_help(store, topic)
     }
@@ -55,7 +55,7 @@ impl Module {
         sender: &UserId,
         room: &str,
     ) -> anyhow::Result<Vec<messaging::Action>> {
-        self.exports
+        self.instance
             .trinity_module_messaging()
             .call_admin(store, cmd, sender.as_str(), room)
     }
@@ -67,7 +67,7 @@ impl Module {
         sender: &UserId,
         room: &RoomId,
     ) -> anyhow::Result<Vec<messaging::Action>> {
-        self.exports.trinity_module_messaging().call_on_msg(
+        self.instance.trinity_module_messaging().call_on_msg(
             store,
             content,
             sender.as_str(),
@@ -147,8 +147,7 @@ impl WasmModules {
 
                 tracing::debug!("instantiating wasm component: {name}...");
 
-                let (exports, instance) =
-                    module::TrinityModule::instantiate(&mut store, &component, &linker)?;
+                let instance = module::TrinityModule::instantiate(&mut store, &component, &linker)?;
 
                 // Convert the module config to Vec of tuples to satisfy wasm interface types.
                 let init_config: Option<Vec<(String, String)>> = modules_config
@@ -156,16 +155,12 @@ impl WasmModules {
                     .map(|mc| Vec::from_iter(mc.clone()));
 
                 tracing::debug!("calling module's init function...");
-                exports
+                instance
                     .trinity_module_messaging()
                     .call_init(&mut store, init_config.as_deref())?;
 
                 tracing::debug!("great success!");
-                compiled_modules.push(Module {
-                    name,
-                    exports,
-                    _instance: instance,
-                });
+                compiled_modules.push(Module { name, instance });
             }
         }
 
