@@ -33,7 +33,7 @@ RUN ./install-cargo-component.sh && \
 RUN cargo component build --release --target=wasm32-unknown-unknown
 
 # Actual image.
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 RUN apt-get update && \
     apt-get install -y ca-certificates && \
