@@ -30,46 +30,56 @@ impl KeyValueStoreApi {
 }
 
 impl kv::Host for KeyValueStoreApi {
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
-        let txn = self.db.begin_write()?;
-        {
-            let mut table = txn.open_table(table_def)?;
-            table.insert(&key, &value)?;
-        }
-        txn.commit()?;
-        Ok(())
-    }
-
-    fn get(&mut self, key: Vec<u8>) -> anyhow::Result<Option<Vec<u8>>> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
-        let txn = self.db.begin_read()?;
-        let table = match txn.open_table(table_def) {
-            Ok(table) => table,
-            Err(err) => match err {
-                redb::Error::DatabaseAlreadyOpen
-                | redb::Error::InvalidSavepoint
-                | redb::Error::Corrupted(_)
-                | redb::Error::TableTypeMismatch(_)
-                | redb::Error::DbSizeMismatch { .. }
-                | redb::Error::TableAlreadyOpen(_, _)
-                | redb::Error::OutOfSpace
-                | redb::Error::Io(_)
-                | redb::Error::LockPoisoned(_) => Err(err)?,
-                redb::Error::TableDoesNotExist(_) => return Ok(None),
-            },
+    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), kv::KvError> {
+        let closure = || {
+            let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
+            let txn = self.db.begin_write()?;
+            {
+                let mut table = txn.open_table(table_def)?;
+                table.insert(&key, &value)?;
+            }
+            txn.commit()?;
+            Ok(())
         };
-        Ok(table.get(&key)?.map(|val| val.to_vec()))
+
+        closure().map_err(|err: anyhow::Error| kv::KvError::Internal(err.to_string()))
     }
 
-    fn remove(&mut self, key: Vec<u8>) -> anyhow::Result<()> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
-        let txn = self.db.begin_write()?;
-        {
-            let mut table = txn.open_table(table_def)?;
-            table.remove(&key)?;
-        }
-        txn.commit()?;
-        Ok(())
+    fn get(&mut self, key: Vec<u8>) -> Result<Option<Vec<u8>>, kv::KvError> {
+        let closure = || {
+            let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
+            let txn = self.db.begin_read()?;
+            let table = match txn.open_table(table_def) {
+                Ok(table) => table,
+                Err(err) => match err {
+                    redb::Error::DatabaseAlreadyOpen
+                    | redb::Error::InvalidSavepoint
+                    | redb::Error::Corrupted(_)
+                    | redb::Error::TableTypeMismatch(_)
+                    | redb::Error::DbSizeMismatch { .. }
+                    | redb::Error::TableAlreadyOpen(_, _)
+                    | redb::Error::OutOfSpace
+                    | redb::Error::Io(_)
+                    | redb::Error::LockPoisoned(_) => Err(err)?,
+                    redb::Error::TableDoesNotExist(_) => return Ok(None),
+                },
+            };
+            Ok(table.get(&key)?.map(|val| val.to_vec()))
+        };
+        closure().map_err(|err: anyhow::Error| kv::KvError::Internal(err.to_string()))
+    }
+
+    fn remove(&mut self, key: Vec<u8>) -> Result<(), kv::KvError> {
+        let closure = || {
+            let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
+            let txn = self.db.begin_write()?;
+            {
+                let mut table = txn.open_table(table_def)?;
+                table.remove(&key)?;
+            }
+            txn.commit()?;
+            Ok(())
+        };
+        closure().map_err(|err: anyhow::Error| kv::KvError::Internal(err.to_string()))
     }
 }

@@ -68,7 +68,7 @@ impl Request {
         self
     }
 
-    pub fn run(self) -> Result<wit::Response, ()> {
+    pub fn run(self) -> Result<wit::Response, wit::RunRequestError> {
         let headers: Vec<_> = self
             .headers
             .into_iter()

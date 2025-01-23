@@ -26,9 +26,17 @@ interface sync-request {
         body: option<string>,
     }
 
-    run-request: func(req: request) -> result<response>;
+    /// An error happened while trying to run a request.
+    variant run-request-error {
+        /// The builder couldn't be created.
+        builder(string),
+        /// The request couldn't be executed.
+        execute(string)
+    }
+
+    run-request: func(req: request) -> result<response, run-request-error>;
 }
 
 world sync-request-world {
-    import sync-request
+    import sync-request;
 }
