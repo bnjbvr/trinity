@@ -72,9 +72,7 @@ jobs:
       - name: Install cargo-component
         working-directory: ./modules/
         run: |
-          wget https://github.com/bytecodealliance/cargo-component/releases/download/v0.4.0/cargo-component-x86_64-unknown-linux-gnu
-          chmod +x ./cargo-component-x86_64-unknown-linux-gnu
-          mv ./cargo-component-x86_64-unknown-linux-gnu ~/.cargo/bin/cargo-component
+          ./install-cargo-component.sh
 
       - name: Check modules
         working-directory: ./modules/
