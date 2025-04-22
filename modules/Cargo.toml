@@ -9,6 +9,7 @@ members = [
     "./mastodon",
     "./memos",
     "./openai",
+    "./silverbullet",
 
     # Libs
     "./libcommand",
