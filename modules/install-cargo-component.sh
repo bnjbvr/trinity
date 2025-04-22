@@ -1,2 +1,3 @@
 #/bin/env sh
-cargo install --locked cargo-component@0.20.0
+# Don't forget to bump in .github/workflows/main.yml too!
+cargo install --locked cargo-component@0.21.1 --force
