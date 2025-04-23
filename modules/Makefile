@@ -22,6 +22,11 @@ bindings: ## Regenerate the Rust bindings from the WIT files, for the libraries.
 build: bindings build-tail ## Build all the component modules in debug mode.
 	@echo
 
+release: bindings
+	@echo "Building all the component modules in release mode..."
+	cargo build --target wasm32-unknown-unknown --release
+	./convert-to-component.sh
+
 check: bindings ## Check all the component modules in debug mode.
 	cargo check --target wasm32-unknown-unknown
 

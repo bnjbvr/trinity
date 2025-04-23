@@ -25,12 +25,11 @@ RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v23.0
 
 ENV PROTOC=/usr/local/bin/protoc
 
-# Install the pinned version of cargo-component.
 WORKDIR /build/modules
-RUN ./install-cargo-component.sh && \
+RUN ./install-tools.sh && \
     rustup component add rustfmt && \
     rustup target add wasm32-unknown-unknown
-RUN cargo component build --release --target=wasm32-unknown-unknown
+RUN make release
 
 # Actual image.
 FROM debian:bookworm-slim
