@@ -72,8 +72,19 @@ jobs:
       - name: Install wasm compile tools
         working-directory: ./modules/
         run: |
-          ./install-tools.sh
+          # Keep those values in sync with the Makefile!
+          wget https://github.com/bytecodealliance/wasm-tools/releases/download/v1.229.0/wasm-tools-1.229.0-x86_64-linux.tar.gz
+          tar pfx wasm-tools-1.229.0-x86_64-linux.tar.gz
+          mv wasm-tools-1.229.0-x86_64-linux/wasm-tools .
+          chmod +x wasm-tools
+          mv wasm-tools /usr/local/bin
+
+          wget https://github.com/bytecodealliance/wit-bindgen/releases/download/v0.41.0/wit-bindgen-0.41.0-x86_64-linux.tar.gz
+          tar pfx wit-bindgen-0.41.0-x86_64-linux.tar.gz
+          mv wit-bindgen-0.41.0-x86_64-linux/wit-bindgen .
+          chmod +x wit-bindgen
+          mv wit-bindgen /usr/local/bin
 
       - name: Check modules
         working-directory: ./modules/
-        run: ./check.sh
+        run: make check
