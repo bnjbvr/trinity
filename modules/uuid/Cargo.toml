@@ -6,12 +6,8 @@ edition = "2021"
 [dependencies]
 uuid = "1.2.1"
 
-cargo-component-bindings.workspace = true
 libcommand.workspace = true
 wit-sys.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
-
-[package.metadata.component]
-target.path = "../../wit/trinity-module.wit"

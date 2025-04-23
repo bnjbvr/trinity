@@ -1,9 +1,7 @@
-use std::collections::HashMap;
+mod sync_request_world;
+use sync_request_world::trinity::api::sync_request as wit;
 
-mod wit {
-    wit_bindgen::generate!("sync-request-world" in "../../wit/sync-request.wit");
-    pub use self::trinity::api::sync_request::*;
-}
+use std::collections::HashMap;
 
 pub use wit::ResponseStatus;
 

@@ -1,6 +1,3 @@
-mod wit {
-    wit_bindgen::generate!("sys-world" in "../../wit/sys.wit");
-    pub use self::trinity::api::sys::*;
-}
+mod sys_world;
 
-pub use wit::rand_u64;
+pub use sys_world::trinity::api::sys::rand_u64;

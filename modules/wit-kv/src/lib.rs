@@ -1,9 +1,7 @@
 use anyhow::Context as _;
 
-mod wit {
-    wit_bindgen::generate!("kv-world" in "../../wit/kv.wit");
-    pub use self::trinity::api::kv::*;
-}
+mod kv_world;
+use kv_world::trinity::api::kv as wit;
 
 pub fn get<K: serde::Serialize + ?Sized, V: for<'a> serde::Deserialize<'a>>(
     key: &K,

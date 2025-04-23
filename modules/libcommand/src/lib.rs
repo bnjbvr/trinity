@@ -10,20 +10,21 @@
 //! - Because of that, I've had to put most of the code, including the whole `impl Interface for X`
 //! block, in the macro body. It's ugly and not practical for maintainability purposes.
 
-pub use cargo_component_bindings;
-
 use std::collections::HashMap;
+
+pub mod trinity_module;
+pub use trinity_module::export;
 
 /// Implements a command for a given type, assuming the type implements the `TrinityCommand` trait.
 #[macro_export]
 macro_rules! impl_command {
     () => {
         const _: () = {
-            // Generates the bindings module.
-            $crate::cargo_component_bindings::generate!();
-
-            use bindings::exports::trinity::module;
             use std::collections::HashMap;
+            use $crate::trinity_module::exports::trinity::module;
+
+            #[rustfmt::skip]
+            $crate::export!(Component with_types_in $crate::trinity_module);
 
             fn consume_client(client: $crate::CommandClient) -> Vec<module::messaging::Action> {
                 let mut actions = Vec::new();

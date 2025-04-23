@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.17"
-wit-bindgen.workspace = true
+wit-bindgen-rt.workspace = true
 
 [lib]
