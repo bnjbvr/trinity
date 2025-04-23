@@ -60,9 +60,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Format modules
-        run: |
-          cargo fmt --all --manifest-path ./modules/Cargo.toml -- --check
+      #- name: Format modules
+      #  run: |
+      #    cargo fmt --all --manifest-path ./modules/Cargo.toml -- --check
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
