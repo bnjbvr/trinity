@@ -26,7 +26,7 @@ RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v23.0
 ENV PROTOC=/usr/local/bin/protoc
 
 WORKDIR /build/modules
-RUN ./install-tools.sh && \
+RUN make install-tools && \
     rustup component add rustfmt && \
     rustup target add wasm32-unknown-unknown
 RUN make release
