@@ -3,4 +3,5 @@
 set -e
 
 ./regenerate.sh
-./build-tail.sh
+
+cargo watch -s "./build-tail.sh"
