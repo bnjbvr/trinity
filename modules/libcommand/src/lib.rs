@@ -1,16 +1,8 @@
 //! High-level library providing a trait that, once implemented, hides the complexity of
 //! Wit bindings.
-//!
-//! There are a few problems at the moment:
-//!
-//! - It's not possible for a lib to implement a component interface, as it has to be the final
-//! binary implementing the component's interface; see also
-//! https://github.com/bytecodealliance/cargo-component/issues/75.
-//!
-//! - Because of that, I've had to put most of the code, including the whole `impl Interface for X`
-//! block, in the macro body. It's ugly and not practical for maintainability purposes.
 
 use std::collections::HashMap;
+use trinity_module::exports::trinity::module;
 
 pub mod trinity_module;
 pub use trinity_module::export;
@@ -19,75 +11,66 @@ pub use trinity_module::export;
 #[macro_export]
 macro_rules! impl_command {
     () => {
-        const _: () = {
-            use std::collections::HashMap;
-            use $crate::trinity_module::exports::trinity::module;
-
-            #[rustfmt::skip]
-            $crate::export!(Component with_types_in $crate::trinity_module);
-
-            fn consume_client(client: $crate::CommandClient) -> Vec<module::messaging::Action> {
-                let mut actions = Vec::new();
-
-                actions.extend(client.messages.into_iter().map(|msg| {
-                    module::messaging::Action::Respond(module::messaging::Message {
-                        text: msg.1,
-                        html: None,
-                        to: msg.0 .0,
-                    })
-                }));
-
-                actions.extend(
-                    client
-                        .reactions
-                        .into_iter()
-                        .map(|reaction| module::messaging::Action::React(reaction)),
-                );
-
-                actions
-            }
-
-            impl module::messaging::Guest for Component {
-                fn init(config: Option<Vec<(String, String)>>) {
-                    // Convert the Vec of tuples to a HashMap for convenience.
-                    let config = match config {
-                        Some(cfg) => cfg
-                            .iter()
-                            .map(|(k, v)| (k.to_string(), v.to_string()))
-                            .collect(),
-                        None => HashMap::new(),
-                    };
-
-                    <Self as $crate::TrinityCommand>::init(config);
-                }
-
-                fn help(topic: Option<String>) -> String {
-                    <Self as $crate::TrinityCommand>::on_help(topic.as_deref())
-                }
-
-                fn on_msg(
-                    content: String,
-                    author_id: String,
-                    _author_name: String,
-                    room: String,
-                ) -> Vec<module::messaging::Action> {
-                    let mut client = $crate::CommandClient::new(room, author_id.clone());
-                    <Self as $crate::TrinityCommand>::on_msg(&mut client, &content);
-                    consume_client(client)
-                }
-
-                fn admin(
-                    cmd: String,
-                    author_id: String,
-                    room: String,
-                ) -> Vec<module::messaging::Action> {
-                    let mut client = $crate::CommandClient::new(room.clone(), author_id);
-                    <Self as $crate::TrinityCommand>::on_admin(&mut client, &cmd);
-                    consume_client(client)
-                }
-            }
-        };
+        $crate::export!(Component with_types_in $crate::trinity_module);
     };
+}
+
+fn consume_client(client: CommandClient) -> Vec<module::messaging::Action> {
+    let mut actions = Vec::new();
+
+    actions.extend(client.messages.into_iter().map(|msg| {
+        module::messaging::Action::Respond(module::messaging::Message {
+            text: msg.1,
+            html: None,
+            to: msg.0 .0,
+        })
+    }));
+
+    actions.extend(
+        client
+            .reactions
+            .into_iter()
+            .map(|reaction| module::messaging::Action::React(reaction)),
+    );
+
+    actions
+}
+
+// Implement `TrinityCommand`, and get an implementation of `Guest` for free!
+impl<T: TrinityCommand> module::messaging::Guest for T {
+    fn init(config: Option<Vec<(String, String)>>) {
+        // Convert the Vec of tuples to a HashMap for convenience.
+        let config = match config {
+            Some(cfg) => cfg
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            None => HashMap::new(),
+        };
+
+        Self::init(config);
+    }
+
+    fn help(topic: Option<String>) -> String {
+        Self::on_help(topic.as_deref())
+    }
+
+    fn on_msg(
+        content: String,
+        author_id: String,
+        _author_name: String,
+        room: String,
+    ) -> Vec<module::messaging::Action> {
+        let mut client = CommandClient::new(room, author_id.clone());
+        Self::on_msg(&mut client, &content);
+        consume_client(client)
+    }
+
+    fn admin(cmd: String, author_id: String, room: String) -> Vec<module::messaging::Action> {
+        let mut client = CommandClient::new(room.clone(), author_id);
+        Self::on_admin(&mut client, &cmd);
+        consume_client(client)
+    }
 }
 
 pub struct Recipient(pub String);
