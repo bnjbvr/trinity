@@ -1,6 +1,0 @@
-#!/bin/sh
-
-set -e
-
-./regenerate.sh
-./build-tail.sh
