@@ -12,17 +12,18 @@ members = [
 
     # Libs
     "./libcommand",
+    "./wit-kv",
     "./wit-log",
     "./wit-sync-request",
     "./wit-sys",
-    "./wit-kv",
 ]
 
 [workspace.dependencies]
-cargo-component-bindings = "0.6.0"
-libcommand = { path = "./libcommand" }
 wit-bindgen = "0.41.0"
-wit-log = { path = "./wit-log" }
-wit-sys = { path = "./wit-sys" }
-wit-sync-request = { path = "./wit-sync-request" }
+wit-bindgen-rt = "0.41.0"
+
+libcommand = { path = "./libcommand" }
 wit-kv = { path = "./wit-kv" }
+wit-log = { path = "./wit-log" }
+wit-sync-request = { path = "./wit-sync-request" }
+wit-sys = { path = "./wit-sys" }

@@ -69,11 +69,11 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install cargo-component
+      - name: Install wasm compile tools
         working-directory: ./modules/
         run: |
-          ./install-cargo-component.sh
+          ./install-tools.sh
 
       - name: Check modules
         working-directory: ./modules/
-        run: cargo component check
+        run: ./check.sh
