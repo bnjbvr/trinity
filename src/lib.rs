@@ -29,7 +29,8 @@ use tokio::{
     time::{sleep, Duration},
 };
 use tracing::{debug, error, info, trace, warn};
-use wasm::{GuestState, Module, WasmModules};
+use wasm::apis::Apis;
+use wasm::{Module, WasmModules};
 
 use crate::admin_table::DEVICE_ID_ENTRY;
 
@@ -212,9 +213,9 @@ fn try_handle_admin<'a, I>(
     room: &RoomId,
     modules_iter: I,
     room_resolver: &mut RoomResolver,
-) -> Option<Vec<wasm::Action>> 
+) -> Option<Vec<wasm::Action>>
 where
-    I: Iterator<Item = (&'a Module, &'a mut wasmtime::Store<GuestState>)>,
+    I: Iterator<Item = (&'a Module, &'a mut wasmtime::Store<Apis>)>,
 {
     let Some(rest) = content.strip_prefix("!admin") else {
         return None;
@@ -256,30 +257,26 @@ where
                 text: format!("Module '{}' not found", target_module_name),
                 html: None,
                 to: sender.to_string(),
-            })])
+            })]);
         } else {
             return Some(vec![wasm::Action::Respond(wasm::Message {
                 text: "missing command".to_owned(),
                 html: None,
                 to: sender.to_string(),
-            })])
+            })]);
         }
     } else {
         return Some(vec![wasm::Action::Respond(wasm::Message {
             text: "missing module and command".to_owned(),
             html: None,
             to: sender.to_string(),
-        })])
+        })]);
     }
 }
 
-fn try_handle_help<'a, I>(
-    content: &str,
-    sender: &UserId,
-    modules_iter: I,
-) -> Option<wasm::Action>
+fn try_handle_help<'a, I>(content: &str, sender: &UserId, modules_iter: I) -> Option<wasm::Action>
 where
-    I: Iterator<Item = (&'a Module, &'a mut wasmtime::Store<GuestState>)>,
+    I: Iterator<Item = (&'a Module, &'a mut wasmtime::Store<Apis>)>,
 {
     let Some(rest) = content.strip_prefix("!help") else {
         return None;
@@ -296,30 +293,33 @@ where
             .split_once(' ')
             .map(|(l, r)| (l, Some(r.trim())))
             .unwrap_or((rest, None));
-        
+
         // Find the module by name from our iterator
         for (module, store) in modules_iter {
             // Skip modules that don't match the name
             if module.name() != target_module_name {
                 continue;
             }
-            
+
             // Get help from the matching module
             let help_text = match module.help(store, topic) {
                 Ok(content) => content,
                 Err(err) => {
                     error!("error when handling help command: {err:#}");
-                    format!("Error getting help for module {}: {}", target_module_name, err)
+                    format!(
+                        "Error getting help for module {}: {}",
+                        target_module_name, err
+                    )
                 }
             };
-            
+
             return Some(wasm::Action::Respond(wasm::Message {
                 text: help_text.clone(),
                 html: Some(help_text),
                 to: sender.to_string(),
             }));
         }
-        
+
         // No module found with the given name
         return Some(wasm::Action::Respond(wasm::Message {
             text: format!("Module '{}' not found", target_module_name),
@@ -404,7 +404,7 @@ async fn on_message(
                     return actions;
                 }
             }
-            
+
             // Special case for empty help request (list all modules)
             if content == "!help" {
                 let mut help_texts = Vec::new();

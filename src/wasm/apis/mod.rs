@@ -10,13 +10,11 @@ use self::log::LogApi;
 use self::sync_request::SyncRequestApi;
 use self::sys::SysApi;
 
-use super::GuestState;
-
 pub(crate) struct Apis {
-    pub(super) sys: SysApi,
-    pub(super) log: LogApi,
-    pub(super) sync_request: SyncRequestApi,
-    pub(super) kv_store: KeyValueStoreApi,
+    sys: SysApi,
+    log: LogApi,
+    sync_request: SyncRequestApi,
+    kv_store: KeyValueStoreApi,
 }
 
 impl Apis {
@@ -29,9 +27,8 @@ impl Apis {
         })
     }
 
-    pub fn link(
-        linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> anyhow::Result<()> {
+    // Updated to use Apis as the store data type
+    pub fn link(linker: &mut wasmtime::component::Linker<Apis>) -> anyhow::Result<()> {
         sys::SysApi::link(linker)?;
         log::LogApi::link(linker)?;
         sync_request::SyncRequestApi::link(linker)?;
