@@ -206,14 +206,16 @@ impl App {
 }
 
 /// Try to handle a message assuming it's an `!admin` command.
-fn try_handle_admin<'a>(
+fn try_handle_admin<'a, I>(
     content: &str,
     sender: &UserId,
     room: &RoomId,
-    store: &mut wasmtime::Store<GuestState>,
-    modules: impl Clone + Iterator<Item = &'a Module>,
+    modules_iter: I,
     room_resolver: &mut RoomResolver,
-) -> Option<Vec<wasm::Action>> {
+) -> Option<Vec<wasm::Action>> 
+where
+    I: Iterator<Item = (&'a Module, &'a mut wasmtime::Store<GuestState>)>,
+{
     let Some(rest) = content.strip_prefix("!admin") else {
         return None;
     };
@@ -222,41 +224,48 @@ fn try_handle_admin<'a>(
 
     if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
-        if let Some((module, rest)) = rest.split_once(' ').map(|(l, r)| (l, r.trim())) {
-            // If the next word resolves to a valid room id use that, otherwise use the
-            // current room.
-            let (possible_room, rest) = rest
-                .split_once(' ')
-                .map_or((rest, ""), |(l, r)| (l, r.trim()));
+        if let Some((target_module_name, rest)) = rest.split_once(' ').map(|(l, r)| (l, r.trim())) {
+            // Find the module by name from our iterator
+            for (module, store) in modules_iter {
+                // Skip modules that don't match the name
+                if module.name() != target_module_name {
+                    continue;
+                }
 
-            let (target_room, rest) = match room_resolver.resolve_room(possible_room) {
-                Ok(Some(resolved_room)) => (resolved_room, rest.to_string()),
-                Ok(None) | Err(_) => (room.to_string(), format!("{} {}", possible_room, rest)),
-            };
+                // If the next word resolves to a valid room id use that, otherwise use the
+                // current room.
+                let (possible_room, rest) = rest
+                    .split_once(' ')
+                    .map_or((rest, ""), |(l, r)| (l, r.trim()));
 
-            let mut found = None;
-            for m in modules {
-                if m.name() == module {
-                    found = match m.admin(&mut *store, rest.trim(), sender, target_room.as_str()) {
-                        Ok(actions) => Some(actions),
-                        Err(err) => {
-                            error!("error when handling admin command: {err:#}");
-                            None
-                        }
-                    };
-                    break;
+                let (target_room, rest) = match room_resolver.resolve_room(possible_room) {
+                    Ok(Some(resolved_room)) => (resolved_room, rest.to_string()),
+                    Ok(None) | Err(_) => (room.to_string(), format!("{} {}", possible_room, rest)),
+                };
+
+                match module.admin(store, rest.trim(), sender, target_room.as_str()) {
+                    Ok(actions) => return Some(actions),
+                    Err(err) => {
+                        error!("error when handling admin command: {err:#}");
+                        return None;
+                    }
                 }
             }
-            found
+            // No module found with the given name
+            return Some(vec![wasm::Action::Respond(wasm::Message {
+                text: format!("Module '{}' not found", target_module_name),
+                html: None,
+                to: sender.to_string(),
+            })])
         } else {
-            Some(vec![wasm::Action::Respond(wasm::Message {
+            return Some(vec![wasm::Action::Respond(wasm::Message {
                 text: "missing command".to_owned(),
                 html: None,
                 to: sender.to_string(),
             })])
         }
     } else {
-        Some(vec![wasm::Action::Respond(wasm::Message {
+        return Some(vec![wasm::Action::Respond(wasm::Message {
             text: "missing module and command".to_owned(),
             html: None,
             to: sender.to_string(),
@@ -264,69 +273,62 @@ fn try_handle_admin<'a>(
     }
 }
 
-fn try_handle_help<'a>(
+fn try_handle_help<'a, I>(
     content: &str,
     sender: &UserId,
-    store: &mut wasmtime::Store<GuestState>,
-    modules: impl Clone + Iterator<Item = &'a Module>,
-) -> Option<wasm::Action> {
+    modules_iter: I,
+) -> Option<wasm::Action>
+where
+    I: Iterator<Item = (&'a Module, &'a mut wasmtime::Store<GuestState>)>,
+{
     let Some(rest) = content.strip_prefix("!help") else {
         return None;
     };
 
     // Special handling for help messages.
-    let (msg, html) = if rest.trim().is_empty() {
-        let mut msg = String::from("Available modules:");
-        let mut html = String::from("Available modules: <ul>");
-        for m in modules {
-            let help = match m.help(&mut *store, None) {
-                Ok(msg) => Some(msg),
-                Err(err) => {
-                    error!("error when handling help command: {err:#}");
-                    None
-                }
-            }
-            .unwrap_or("<missing>".to_string());
-
-            msg.push_str(&format!("\n- {name}: {help}", name = m.name(), help = help));
-            // TODO lol sanitize html
-            html.push_str(&format!(
-                "<li><b>{name}</b>: {help}</li>",
-                name = m.name(),
-                help = help
-            ));
-        }
-        html.push_str("</ul>");
-
-        (msg, html)
+    if rest.trim().is_empty() {
+        // If we're asking for general help (empty rest), we need all modules
+        // This is now handled at a higher level that can iterate over all modules
+        return None;
     } else if let Some(rest) = rest.strip_prefix(' ') {
         let rest = rest.trim();
-        let (module, topic) = rest
+        let (target_module_name, topic) = rest
             .split_once(' ')
             .map(|(l, r)| (l, Some(r.trim())))
             .unwrap_or((rest, None));
-        let mut found = None;
-        for m in modules {
-            if m.name() == module {
-                found = m.help(&mut *store, topic).ok();
-                break;
+        
+        // Find the module by name from our iterator
+        for (module, store) in modules_iter {
+            // Skip modules that don't match the name
+            if module.name() != target_module_name {
+                continue;
             }
+            
+            // Get help from the matching module
+            let help_text = match module.help(store, topic) {
+                Ok(content) => content,
+                Err(err) => {
+                    error!("error when handling help command: {err:#}");
+                    format!("Error getting help for module {}: {}", target_module_name, err)
+                }
+            };
+            
+            return Some(wasm::Action::Respond(wasm::Message {
+                text: help_text.clone(),
+                html: Some(help_text),
+                to: sender.to_string(),
+            }));
         }
-        let msg = if let Some(content) = found {
-            content
-        } else {
-            format!("module {module} not found")
-        };
-        (msg.clone(), msg)
-    } else {
-        return None;
-    };
+        
+        // No module found with the given name
+        return Some(wasm::Action::Respond(wasm::Message {
+            text: format!("Module '{}' not found", target_module_name),
+            html: None,
+            to: sender.to_string(),
+        }));
+    }
 
-    return Some(wasm::Action::Respond(wasm::Message {
-        text: msg,
-        html: Some(html),
-        to: sender.to_string(), // TODO rather room?
-    }));
+    None
 }
 
 enum AnyEvent {
@@ -389,33 +391,56 @@ async fn on_message(
         let new_actions = tokio::task::spawn_blocking(move || {
             let ctx = &mut *futures::executor::block_on(ctx.lock());
 
-            let (store, modules) = ctx.modules.iter();
-
+            // First, handle admin commands for admin users
             if ev.sender() == ctx.admin_user_id {
-                match try_handle_admin(
+                if let Some(actions) = try_handle_admin(
                     &content,
                     &ctx.admin_user_id,
                     &room_id,
-                    store,
-                    modules.clone(),
+                    ctx.modules.iter(),
                     &mut ctx.room_resolver,
                 ) {
-                    None => {}
-                    Some(actions) => {
-                        trace!("handled by admin, skipping modules");
-                        return actions;
-                    }
+                    trace!("handled by admin, skipping modules");
+                    return actions;
                 }
             }
+            
+            // Special case for empty help request (list all modules)
+            if content == "!help" {
+                let mut help_texts = Vec::new();
+                help_texts.push("Available modules:".to_string());
 
-            if let Some(actions) = try_handle_help(&content, ev.sender(), store, modules.clone()) {
+                // Collect help from all modules
+                for (module, store) in ctx.modules.iter() {
+                    match module.help(store, None) {
+                        Ok(content) => {
+                            help_texts.push(format!("- {}: {}", module.name(), content));
+                        }
+                        Err(err) => {
+                            error!("error when handling help command: {err:#}");
+                            help_texts.push(format!("- {}: Error getting help", module.name()));
+                        }
+                    }
+                }
+
+                let help_text = help_texts.join("\n");
+                return vec![wasm::Action::Respond(wasm::Message {
+                    text: help_text.clone(),
+                    html: Some(help_text),
+                    to: ev.sender().to_string(),
+                })];
+            }
+
+            // Handle specific help requests
+            if let Some(actions) = try_handle_help(&content, ev.sender(), ctx.modules.iter()) {
                 trace!("handled by help, skipping modules");
                 return vec![actions];
             }
 
-            for module in modules {
+            // Handle regular message processing
+            for (module, store) in ctx.modules.iter() {
                 trace!("trying to handle message with {}...", module.name());
-                match module.handle(&mut *store, &content, ev.sender(), &room_id) {
+                match module.handle(store, &content, ev.sender(), &room_id) {
                     Ok(actions) => {
                         if !actions.is_empty() {
                             // TODO support handling the same message with several handlers.

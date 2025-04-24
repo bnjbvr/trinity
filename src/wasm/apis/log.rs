@@ -18,10 +18,9 @@ impl LogApi {
     }
 
     pub fn link(
-        id: usize,
         linker: &mut wasmtime::component::Linker<GuestState>,
     ) -> wasmtime::Result<()> {
-        log::add_to_linker(linker, move |s| &mut s.imports[id].apis.log)
+        log::add_to_linker(linker, |s| &mut s.apis.log)
     }
 }
 

@@ -22,10 +22,9 @@ impl KeyValueStoreApi {
     }
 
     pub fn link(
-        id: usize,
         linker: &mut wasmtime::component::Linker<GuestState>,
     ) -> anyhow::Result<()> {
-        kv::add_to_linker(linker, move |s| &mut s.imports[id].apis.kv_store)
+        kv::add_to_linker(linker, |s| &mut s.apis.kv_store)
     }
 
     fn set_impl(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {

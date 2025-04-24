@@ -15,10 +15,9 @@ pub(super) struct SyncRequestApi {
 
 impl SyncRequestApi {
     pub fn link(
-        id: usize,
         linker: &mut wasmtime::component::Linker<GuestState>,
     ) -> anyhow::Result<()> {
-        sync_request::add_to_linker(linker, move |s| &mut s.imports[id].apis.sync_request)
+        sync_request::add_to_linker(linker, |s| &mut s.apis.sync_request)
     }
 }
 

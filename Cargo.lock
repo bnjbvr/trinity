@@ -3157,6 +3157,7 @@ dependencies = [
  "matrix-sdk",
  "notify",
  "rand 0.8.5",
+ "rayon",
  "redb",
  "reqwest",
  "serde",

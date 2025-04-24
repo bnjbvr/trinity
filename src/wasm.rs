@@ -12,6 +12,7 @@ use module::TrinityModule;
 mod apis;
 
 use std::collections::HashMap;
+use rayon::prelude::*;
 use std::path::PathBuf;
 
 use matrix_sdk::ruma::{RoomId, UserId};
@@ -19,13 +20,14 @@ use wasmtime::AsContextMut;
 
 use crate::{wasm::apis::Apis, ShareableDatabase};
 
-pub struct ModuleState {
+pub(crate) struct GuestState {
     apis: Apis,
 }
 
-#[derive(Default)]
-pub(crate) struct GuestState {
-    imports: Vec<ModuleState>,
+impl Default for GuestState {
+    fn default() -> Self {
+        panic!("GuestState requires Apis to be initialized and cannot be created with default()")
+    }
 }
 
 pub(crate) struct Module {
@@ -40,35 +42,35 @@ impl Module {
 
     pub fn help(
         &self,
-        store: impl AsContextMut<Data = GuestState>,
+        mut store: impl AsContextMut<Data = GuestState>,
         topic: Option<&str>,
     ) -> anyhow::Result<String> {
         self.instance
             .trinity_module_messaging()
-            .call_help(store, topic)
+            .call_help(&mut store, topic)
     }
 
     pub fn admin(
         &self,
-        store: impl AsContextMut<Data = GuestState>,
+        mut store: impl AsContextMut<Data = GuestState>,
         cmd: &str,
         sender: &UserId,
         room: &str,
     ) -> anyhow::Result<Vec<messaging::Action>> {
         self.instance
             .trinity_module_messaging()
-            .call_admin(store, cmd, sender.as_str(), room)
+            .call_admin(&mut store, cmd, sender.as_str(), room)
     }
 
     pub fn handle(
         &self,
-        store: impl AsContextMut<Data = GuestState>,
+        mut store: impl AsContextMut<Data = GuestState>,
         content: &str,
         sender: &UserId,
         room: &RoomId,
     ) -> anyhow::Result<Vec<messaging::Action>> {
         self.instance.trinity_module_messaging().call_on_msg(
-            store,
+            &mut store,
             content,
             sender.as_str(),
             "author name NYI",
@@ -81,8 +83,7 @@ pub(crate) type WasmStore = wasmtime::Store<GuestState>;
 
 #[derive(Default)]
 pub(crate) struct WasmModules {
-    store: WasmStore,
-    modules: Vec<Module>,
+    modules: Vec<(Module, WasmStore)>,
 }
 
 impl WasmModules {
@@ -101,76 +102,179 @@ impl WasmModules {
 
         let engine = wasmtime::Engine::new(&config)?;
 
-        let mut compiled_modules = Vec::new();
-
-        let state = GuestState::default();
-
-        let mut store = wasmtime::Store::new(&engine, state);
-
         tracing::debug!("precompiling wasm modules...");
-        for modules_path in modules_paths {
-            tracing::debug!(
-                "looking for modules in {}...",
-                modules_path.to_string_lossy()
-            );
-            for module_path in std::fs::read_dir(modules_path)? {
-                let module_path = module_path?.path();
+        // First, collect all module names and paths in a non-parallel loop
+        let module_entries: Vec<(String, PathBuf)> = modules_paths
+            .iter()
+            .flat_map(|modules_path| {
+                tracing::debug!(
+                    "looking for modules in {}...",
+                    modules_path.to_string_lossy()
+                );
+                std::fs::read_dir(modules_path)
+                    .into_iter()
+                    .flat_map(|entries| entries.filter_map(Result::ok))
+                    .filter_map(|entry| {
+                        let module_path = entry.path();
+                        if module_path.extension().map_or(true, |ext| ext != "wasm") {
+                            return None;
+                        }
 
-                if module_path.extension().map_or(true, |ext| ext != "wasm") {
-                    continue;
-                }
+                        let name = module_path
+                            .file_stem()
+                            .map(|s| s.to_string_lossy())
+                            .unwrap_or_else(|| module_path.to_string_lossy())
+                            .to_string();
 
-                let name = module_path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy())
-                    .unwrap_or_else(|| module_path.to_string_lossy())
-                    .to_string();
+                        Some((name, module_path))
+                    })
+            })
+            .collect();
 
+        // Then, compile all modules in parallel using rayon and pair each Module with its own Store
+        let compiled_modules: Vec<(Module, WasmStore)> = module_entries
+            .into_par_iter() // Use parallel iterator for compilation
+            .filter_map(|(name, module_path)| {
                 tracing::debug!("creating APIs...");
-                let module_state = ModuleState {
-                    apis: Apis::new(name.clone(), db.clone())?,
-                };
+                // Create APIs directly for the module
+                let apis = Apis::new(name.clone(), db.clone()).ok()?;
 
-                let entry = store.data_mut().imports.len();
-                store.data_mut().imports.push(module_state);
+                // Create a thread-local store for each module
+                let mut thread_store = wasmtime::Store::new(&engine, GuestState { apis });
 
                 let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
 
-                apis::Apis::link(entry, &mut linker)?;
+                if apis::Apis::link(&mut linker).is_err() {
+                    return None;
+                }
 
                 tracing::debug!(
                     "compiling wasm module: {name} @ {}...",
                     module_path.to_string_lossy()
                 );
 
-                let component = wasmtime::component::Component::from_file(&engine, &module_path)?;
+                let component = wasmtime::component::Component::from_file(&engine, &module_path).ok()?;
 
                 tracing::debug!("instantiating wasm component: {name}...");
 
-                let instance = module::TrinityModule::instantiate(&mut store, &component, &linker)?;
+                let instance = module::TrinityModule::instantiate(&mut thread_store, &component, &linker).ok()?;
 
-                // Convert the module config to Vec of tuples to satisfy wasm interface types.
                 let init_config: Option<Vec<(String, String)>> = modules_config
                     .get(&name)
                     .map(|mc| Vec::from_iter(mc.clone()));
 
                 tracing::debug!("calling module's init function...");
-                instance
+                if instance
                     .trinity_module_messaging()
-                    .call_init(&mut store, init_config.as_deref())?;
+                    .call_init(&mut thread_store, init_config.as_deref())
+                    .is_err()
+                {
+                    return None;
+                }
 
                 tracing::debug!("great success!");
-                compiled_modules.push(Module { name, instance });
-            }
-        }
+                // Return both the Module and its associated Store
+                Some((Module { name, instance }, thread_store))
+            })
+            .collect();
 
         Ok(Self {
-            store,
             modules: compiled_modules,
         })
     }
 
-    pub(crate) fn iter(&mut self) -> (&mut WasmStore, impl Clone + Iterator<Item = &Module>) {
-        (&mut self.store, self.modules.iter())
+    pub fn handle_message(
+        &mut self,
+        content: &str,
+        sender: &UserId,
+        room: &RoomId,
+    ) -> Vec<(String, Vec<messaging::Action>)> {
+        self.modules
+            .iter_mut()
+            .filter_map(|(module, store)| {
+                module
+                    .handle(store, content, sender, room)
+                    .ok()
+                    .filter(|actions| !actions.is_empty())
+                    .map(|actions| (module.name().to_owned(), actions))
+            })
+            .collect()
+    }
+
+    pub fn help(&mut self, topic: Option<&str>) -> Vec<(&str, anyhow::Result<String>)> {
+        self.modules
+            .iter_mut()
+            .map(|(module, store)| {
+                (module.name(), module.help(store, topic))
+            })
+            .collect()
+    }
+
+    pub fn help_for(&mut self, name: &str, topic: Option<&str>) -> Option<anyhow::Result<String>> {
+        self.modules
+            .iter_mut()
+            .find(|(module, _)| module.name() == name)
+            .map(|(module, store)| module.help(store, topic))
+    }
+    
+    pub(crate) fn iter(&mut self) -> impl Iterator<Item = (&Module, &mut WasmStore)> + '_ {
+        self.modules.iter_mut().map(|(module, store)| (&*module, store))
+    }
+
+    pub fn refresh(
+        &mut self,
+        old_name: &str,
+        db: ShareableDatabase,
+        component_path: &PathBuf,
+        config: Option<&HashMap<String, String>>,
+    ) -> anyhow::Result<()> {
+        // Find the module to refresh
+        if let Some(idx) = self.modules.iter().position(|(m, _)| m.name() == old_name) {
+            // Create a new config and engine
+            let mut wasmtime_config = wasmtime::Config::new();
+            wasmtime_config.wasm_component_model(true);
+            let engine = wasmtime::Engine::new(&wasmtime_config)?;
+
+            // Extract the name for logs and creating APIs
+            let name = component_path
+                .file_stem()
+                .map(|s| s.to_string_lossy())
+                .unwrap_or_else(|| component_path.to_string_lossy())
+                .to_string();
+
+            tracing::debug!("creating APIs for refreshed module...");
+            let apis = Apis::new(name.clone(), db)?;
+
+            // Create a new store for this module with direct API access
+            let mut store = wasmtime::Store::new(&engine, GuestState { apis });
+
+            let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
+
+            apis::Apis::link(&mut linker)?;
+
+            tracing::debug!(
+                "compiling refreshed wasm module: {name} @ {}...",
+                component_path.to_string_lossy()
+            );
+
+            let component = wasmtime::component::Component::from_file(&engine, component_path)?;
+
+            tracing::debug!("instantiating refreshed wasm component: {name}...");
+
+            let instance = module::TrinityModule::instantiate(&mut store, &component, &linker)?;
+
+            let init_config = config.map(|c| Vec::from_iter(c.clone()));
+
+            tracing::debug!("calling refreshed module's init function...");
+            instance
+                .trinity_module_messaging()
+                .call_init(&mut store, init_config.as_deref())?;
+
+            // Replace the old module with the new one
+            self.modules[idx] = (Module { name, instance }, store);
+            Ok(())
+        } else {
+            anyhow::bail!("module {} not found", old_name);
+        }
     }
 }
