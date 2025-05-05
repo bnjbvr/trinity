@@ -1,5 +1,5 @@
 use crate::wasm::apis::log::trinity::api::log;
-use crate::wasm::GuestState;
+use crate::wasm::ModuleState;
 
 wasmtime::component::bindgen!({
     path: "./wit/log.wit",
@@ -17,11 +17,8 @@ impl LogApi {
         }
     }
 
-    pub fn link(
-        id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> wasmtime::Result<()> {
-        log::add_to_linker(linker, move |s| &mut s.imports[id].apis.log)
+    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> wasmtime::Result<()> {
+        log::add_to_linker(linker, move |s| &mut s.apis.log)
     }
 }
 

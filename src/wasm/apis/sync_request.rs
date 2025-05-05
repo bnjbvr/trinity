@@ -1,5 +1,5 @@
 use crate::wasm::apis::sync_request::trinity::api::sync_request;
-use crate::wasm::GuestState;
+use crate::wasm::ModuleState;
 
 wasmtime::component::bindgen!({
     path: "./wit/sync-request.wit",
@@ -14,11 +14,8 @@ pub(super) struct SyncRequestApi {
 }
 
 impl SyncRequestApi {
-    pub fn link(
-        id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> anyhow::Result<()> {
-        sync_request::add_to_linker(linker, move |s| &mut s.imports[id].apis.sync_request)
+    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> anyhow::Result<()> {
+        sync_request::add_to_linker(linker, move |s| &mut s.apis.sync_request)
     }
 }
 
