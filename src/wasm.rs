@@ -8,6 +8,8 @@ use crate::wasm::module::exports::trinity::module::messaging;
 pub(crate) use messaging::Action;
 pub(crate) use messaging::Message;
 use module::TrinityModule;
+use rayon::iter::IntoParallelIterator as _;
+use rayon::iter::ParallelIterator as _;
 use wasmtime::Store;
 
 mod apis;
@@ -100,6 +102,8 @@ impl WasmModules {
                 modules_path.to_string_lossy()
             );
 
+            // Collect all the modules paths and names.
+            let mut path_and_names = vec![];
             for module_path in std::fs::read_dir(modules_path)? {
                 let module_path = module_path?.path();
 
@@ -113,44 +117,57 @@ impl WasmModules {
                     .unwrap_or_else(|| module_path.to_string_lossy())
                     .to_string();
 
-                tracing::debug!("creating APIs...");
-                let module_state = ModuleState {
-                    apis: Apis::new(name.clone(), db.clone())?,
-                };
-
-                let mut store = wasmtime::Store::new(&engine, module_state);
-                let mut linker = wasmtime::component::Linker::new(&engine);
-
-                apis::Apis::link(&mut linker)?;
-
-                tracing::debug!(
-                    "compiling wasm module: {name} @ {}...",
-                    module_path.to_string_lossy()
-                );
-
-                let component = wasmtime::component::Component::from_file(&engine, &module_path)?;
-
-                tracing::debug!("instantiating wasm component: {name}...");
-
-                let instance = module::TrinityModule::instantiate(&mut store, &component, &linker)?;
-
-                // Convert the module config to Vec of tuples to satisfy wasm interface types.
-                let init_config: Option<Vec<(String, String)>> = modules_config
-                    .get(&name)
-                    .map(|mc| Vec::from_iter(mc.clone()));
-
-                tracing::debug!("calling module's init function...");
-                instance
-                    .trinity_module_messaging()
-                    .call_init(&mut store, init_config.as_deref())?;
-
-                tracing::debug!("great success!");
-                compiled_modules.push(Module {
-                    name,
-                    instance,
-                    store,
-                });
+                path_and_names.push((module_path, name));
             }
+
+            // Compile and re-init all the modules in parallel.
+            let batch: Vec<_> = path_and_names
+                .into_par_iter()
+                .map(|(module_path, name)| -> anyhow::Result<Module> {
+                    let span = tracing::debug_span!("compiling module", name = %name, );
+                    let _scope = span.enter();
+
+                    tracing::debug!(
+                        path = module_path.to_str().unwrap_or("<invalid path>"),
+                        "initializing: creating APIs"
+                    );
+                    let module_state = ModuleState {
+                        apis: Apis::new(name.clone(), db.clone())?,
+                    };
+
+                    let mut store = wasmtime::Store::new(&engine, module_state);
+                    let mut linker = wasmtime::component::Linker::new(&engine);
+
+                    apis::Apis::link(&mut linker)?;
+
+                    tracing::debug!("compiling");
+                    let component =
+                        wasmtime::component::Component::from_file(&engine, &module_path)?;
+
+                    tracing::debug!("instantiating");
+                    let instance =
+                        module::TrinityModule::instantiate(&mut store, &component, &linker)?;
+
+                    // Convert the module config to Vec of tuples to satisfy wasm interface types.
+                    let init_config: Option<Vec<(String, String)>> = modules_config
+                        .get(&name)
+                        .map(|mc| Vec::from_iter(mc.clone()));
+
+                    tracing::debug!("calling module's init() function");
+                    instance
+                        .trinity_module_messaging()
+                        .call_init(&mut store, init_config.as_deref())?;
+
+                    tracing::debug!("great success!");
+                    Ok(Module {
+                        name,
+                        instance,
+                        store,
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            compiled_modules.extend(batch);
         }
 
         Ok(Self {
