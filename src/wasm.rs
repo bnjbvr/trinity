@@ -8,6 +8,7 @@ use crate::wasm::module::exports::trinity::module::messaging;
 pub(crate) use messaging::Action;
 pub(crate) use messaging::Message;
 use module::TrinityModule;
+use wasmtime::Store;
 
 mod apis;
 
@@ -15,7 +16,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use matrix_sdk::ruma::{RoomId, UserId};
-use wasmtime::AsContextMut;
 
 use crate::{wasm::apis::Apis, ShareableDatabase};
 
@@ -23,14 +23,10 @@ pub struct ModuleState {
     apis: Apis,
 }
 
-#[derive(Default)]
-pub(crate) struct GuestState {
-    imports: Vec<ModuleState>,
-}
-
 pub(crate) struct Module {
     name: String,
     instance: TrinityModule,
+    pub store: Store<ModuleState>,
 }
 
 impl Module {
@@ -38,37 +34,34 @@ impl Module {
         self.name.as_str()
     }
 
-    pub fn help(
-        &self,
-        store: impl AsContextMut<Data = GuestState>,
-        topic: Option<&str>,
-    ) -> anyhow::Result<String> {
+    pub fn help(&mut self, topic: Option<&str>) -> anyhow::Result<String> {
         self.instance
             .trinity_module_messaging()
-            .call_help(store, topic)
+            .call_help(&mut self.store, topic)
     }
 
     pub fn admin(
-        &self,
-        store: impl AsContextMut<Data = GuestState>,
+        &mut self,
         cmd: &str,
         sender: &UserId,
         room: &str,
     ) -> anyhow::Result<Vec<messaging::Action>> {
-        self.instance
-            .trinity_module_messaging()
-            .call_admin(store, cmd, sender.as_str(), room)
+        self.instance.trinity_module_messaging().call_admin(
+            &mut self.store,
+            cmd,
+            sender.as_str(),
+            room,
+        )
     }
 
     pub fn handle(
-        &self,
-        store: impl AsContextMut<Data = GuestState>,
+        &mut self,
         content: &str,
         sender: &UserId,
         room: &RoomId,
     ) -> anyhow::Result<Vec<messaging::Action>> {
         self.instance.trinity_module_messaging().call_on_msg(
-            store,
+            &mut self.store,
             content,
             sender.as_str(),
             "author name NYI",
@@ -77,11 +70,8 @@ impl Module {
     }
 }
 
-pub(crate) type WasmStore = wasmtime::Store<GuestState>;
-
 #[derive(Default)]
 pub(crate) struct WasmModules {
-    store: WasmStore,
     modules: Vec<Module>,
 }
 
@@ -103,16 +93,13 @@ impl WasmModules {
 
         let mut compiled_modules = Vec::new();
 
-        let state = GuestState::default();
-
-        let mut store = wasmtime::Store::new(&engine, state);
-
         tracing::debug!("precompiling wasm modules...");
         for modules_path in modules_paths {
             tracing::debug!(
                 "looking for modules in {}...",
                 modules_path.to_string_lossy()
             );
+
             for module_path in std::fs::read_dir(modules_path)? {
                 let module_path = module_path?.path();
 
@@ -131,12 +118,10 @@ impl WasmModules {
                     apis: Apis::new(name.clone(), db.clone())?,
                 };
 
-                let entry = store.data_mut().imports.len();
-                store.data_mut().imports.push(module_state);
+                let mut store = wasmtime::Store::new(&engine, module_state);
+                let mut linker = wasmtime::component::Linker::new(&engine);
 
-                let mut linker = wasmtime::component::Linker::<GuestState>::new(&engine);
-
-                apis::Apis::link(entry, &mut linker)?;
+                apis::Apis::link(&mut linker)?;
 
                 tracing::debug!(
                     "compiling wasm module: {name} @ {}...",
@@ -160,17 +145,20 @@ impl WasmModules {
                     .call_init(&mut store, init_config.as_deref())?;
 
                 tracing::debug!("great success!");
-                compiled_modules.push(Module { name, instance });
+                compiled_modules.push(Module {
+                    name,
+                    instance,
+                    store,
+                });
             }
         }
 
         Ok(Self {
-            store,
             modules: compiled_modules,
         })
     }
 
-    pub(crate) fn iter(&mut self) -> (&mut WasmStore, impl Clone + Iterator<Item = &Module>) {
-        (&mut self.store, self.modules.iter())
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut Module> {
+        self.modules.iter_mut()
     }
 }

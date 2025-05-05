@@ -29,7 +29,7 @@ use tokio::{
     time::{sleep, Duration},
 };
 use tracing::{debug, error, info, trace, warn};
-use wasm::{GuestState, Module, WasmModules};
+use wasm::{Module, WasmModules};
 
 use crate::admin_table::DEVICE_ID_ENTRY;
 
@@ -210,8 +210,7 @@ fn try_handle_admin<'a>(
     content: &str,
     sender: &UserId,
     room: &RoomId,
-    store: &mut wasmtime::Store<GuestState>,
-    modules: impl Clone + Iterator<Item = &'a Module>,
+    modules: impl Iterator<Item = &'a mut Module>,
     room_resolver: &mut RoomResolver,
 ) -> Option<Vec<wasm::Action>> {
     let Some(rest) = content.strip_prefix("!admin") else {
@@ -237,7 +236,7 @@ fn try_handle_admin<'a>(
             let mut found = None;
             for m in modules {
                 if m.name() == module {
-                    found = match m.admin(&mut *store, rest.trim(), sender, target_room.as_str()) {
+                    found = match m.admin(rest.trim(), sender, target_room.as_str()) {
                         Ok(actions) => Some(actions),
                         Err(err) => {
                             error!("error when handling admin command: {err:#}");
@@ -267,8 +266,7 @@ fn try_handle_admin<'a>(
 fn try_handle_help<'a>(
     content: &str,
     sender: &UserId,
-    store: &mut wasmtime::Store<GuestState>,
-    modules: impl Clone + Iterator<Item = &'a Module>,
+    modules: impl Iterator<Item = &'a mut Module>,
 ) -> Option<wasm::Action> {
     let Some(rest) = content.strip_prefix("!help") else {
         return None;
@@ -279,7 +277,7 @@ fn try_handle_help<'a>(
         let mut msg = String::from("Available modules:");
         let mut html = String::from("Available modules: <ul>");
         for m in modules {
-            let help = match m.help(&mut *store, None) {
+            let help = match m.help(None) {
                 Ok(msg) => Some(msg),
                 Err(err) => {
                     error!("error when handling help command: {err:#}");
@@ -308,7 +306,7 @@ fn try_handle_help<'a>(
         let mut found = None;
         for m in modules {
             if m.name() == module {
-                found = m.help(&mut *store, topic).ok();
+                found = m.help(topic).ok();
                 break;
             }
         }
@@ -389,15 +387,12 @@ async fn on_message(
         let new_actions = tokio::task::spawn_blocking(move || {
             let ctx = &mut *futures::executor::block_on(ctx.lock());
 
-            let (store, modules) = ctx.modules.iter();
-
             if ev.sender() == ctx.admin_user_id {
                 match try_handle_admin(
                     &content,
                     &ctx.admin_user_id,
                     &room_id,
-                    store,
-                    modules.clone(),
+                    ctx.modules.iter_mut(),
                     &mut ctx.room_resolver,
                 ) {
                     None => {}
@@ -408,14 +403,14 @@ async fn on_message(
                 }
             }
 
-            if let Some(actions) = try_handle_help(&content, ev.sender(), store, modules.clone()) {
+            if let Some(actions) = try_handle_help(&content, ev.sender(), ctx.modules.iter_mut()) {
                 trace!("handled by help, skipping modules");
                 return vec![actions];
             }
 
-            for module in modules {
+            for module in ctx.modules.iter_mut() {
                 trace!("trying to handle message with {}...", module.name());
-                match module.handle(&mut *store, &content, ev.sender(), &room_id) {
+                match module.handle(&content, ev.sender(), &room_id) {
                     Ok(actions) => {
                         if !actions.is_empty() {
                             // TODO support handling the same message with several handlers.

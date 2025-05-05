@@ -1,5 +1,5 @@
 use crate::wasm::apis::sys::trinity::api::sys;
-use crate::wasm::GuestState;
+use crate::wasm::ModuleState;
 
 wasmtime::component::bindgen!({
     path: "./wit/sys.wit",
@@ -9,11 +9,8 @@ wasmtime::component::bindgen!({
 pub(super) struct SysApi;
 
 impl SysApi {
-    pub fn link(
-        id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> wasmtime::Result<()> {
-        sys::add_to_linker(linker, move |s| &mut s.imports[id].apis.sys)
+    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> wasmtime::Result<()> {
+        sys::add_to_linker(linker, move |s| &mut s.apis.sys)
     }
 }
 

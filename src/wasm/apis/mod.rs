@@ -10,7 +10,7 @@ use self::log::LogApi;
 use self::sync_request::SyncRequestApi;
 use self::sys::SysApi;
 
-use super::GuestState;
+use super::ModuleState;
 
 pub(crate) struct Apis {
     sys: SysApi,
@@ -29,14 +29,11 @@ impl Apis {
         })
     }
 
-    pub fn link(
-        id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> anyhow::Result<()> {
-        sys::SysApi::link(id, linker)?;
-        log::LogApi::link(id, linker)?;
-        sync_request::SyncRequestApi::link(id, linker)?;
-        kv_store::KeyValueStoreApi::link(id, linker)?;
+    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> anyhow::Result<()> {
+        sys::SysApi::link(linker)?;
+        log::LogApi::link(linker)?;
+        sync_request::SyncRequestApi::link(linker)?;
+        kv_store::KeyValueStoreApi::link(linker)?;
         Ok(())
     }
 }

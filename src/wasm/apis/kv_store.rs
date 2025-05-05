@@ -1,7 +1,8 @@
 use redb::{ReadableTable as _, TableDefinition};
 
 use crate::wasm::apis::kv_store::trinity::api::kv;
-use crate::{wasm::GuestState, ShareableDatabase};
+use crate::wasm::ModuleState;
+use crate::ShareableDatabase;
 
 wasmtime::component::bindgen!({
     path: "./wit/kv.wit",
@@ -21,11 +22,8 @@ impl KeyValueStoreApi {
         })
     }
 
-    pub fn link(
-        id: usize,
-        linker: &mut wasmtime::component::Linker<GuestState>,
-    ) -> anyhow::Result<()> {
-        kv::add_to_linker(linker, move |s| &mut s.imports[id].apis.kv_store)
+    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> anyhow::Result<()> {
+        kv::add_to_linker(linker, move |s| &mut s.apis.kv_store)
     }
 
     fn set_impl(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {
