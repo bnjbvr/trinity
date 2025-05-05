@@ -79,19 +79,13 @@ pub(crate) struct WasmModules {
 
 impl WasmModules {
     /// Create a new collection of wasm modules.
-    ///
-    /// Must be called from a blocking context.
     pub fn new(
+        engine: &wasmtime::Engine,
         db: ShareableDatabase,
         modules_paths: &[PathBuf],
         modules_config: &HashMap<String, HashMap<String, String>>,
     ) -> anyhow::Result<Self> {
         tracing::debug!("setting up wasm context...");
-
-        let mut config = wasmtime::Config::new();
-        config.wasm_component_model(true);
-
-        let engine = wasmtime::Engine::new(&config)?;
 
         let mut compiled_modules = Vec::new();
 
