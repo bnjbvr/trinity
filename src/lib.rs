@@ -133,6 +133,7 @@ struct AppCtx {
     modules: WasmModules,
     modules_paths: Vec<PathBuf>,
     modules_config: HashMap<String, HashMap<String, String>>,
+    engine: wasmtime::Engine,
     needs_recompile: bool,
     admin_user_id: OwnedUserId,
     db: ShareableDatabase,
@@ -141,8 +142,6 @@ struct AppCtx {
 
 impl AppCtx {
     /// Create a new `AppCtx`.
-    ///
-    /// Must be called from a blocking context.
     pub fn new(
         client: Client,
         modules_paths: Vec<PathBuf>,
@@ -151,14 +150,22 @@ impl AppCtx {
         admin_user_id: OwnedUserId,
     ) -> anyhow::Result<Self> {
         let room_resolver = RoomResolver::new(client);
+
+        let mut config = wasmtime::Config::new();
+        config.wasm_component_model(true);
+        config.cache_config_load_default()?;
+
+        let engine = wasmtime::Engine::new(&config)?;
+
         Ok(Self {
-            modules: WasmModules::new(db.clone(), &modules_paths, &modules_config)?,
+            modules: WasmModules::new(&engine, db.clone(), &modules_paths, &modules_config)?,
             modules_paths,
             modules_config,
             needs_recompile: false,
             admin_user_id,
             db,
             room_resolver,
+            engine,
         })
     }
 
@@ -171,24 +178,27 @@ impl AppCtx {
             *need = true;
         }
 
-        tokio::task::spawn_blocking(move || {
-            let mut ptr = futures::executor::block_on(async {
-                tokio::time::sleep(Duration::new(1, 0)).await;
-                ptr.lock().await
-            });
-
-            match WasmModules::new(ptr.db.clone(), &ptr.modules_paths, &ptr.modules_config) {
-                Ok(modules) => {
-                    ptr.modules = modules;
-                    info!("successful hot reload!");
-                }
-                Err(err) => {
-                    error!("hot reload failed: {err:#}");
-                }
-            }
-
-            ptr.needs_recompile = false;
+        let mut ptr = futures::executor::block_on(async {
+            tokio::time::sleep(Duration::new(1, 0)).await;
+            ptr.lock().await
         });
+
+        match WasmModules::new(
+            &ptr.engine,
+            ptr.db.clone(),
+            &ptr.modules_paths,
+            &ptr.modules_config,
+        ) {
+            Ok(modules) => {
+                ptr.modules = modules;
+                info!("successful hot reload!");
+            }
+            Err(err) => {
+                error!("hot reload failed: {err:#}");
+            }
+        }
+
+        ptr.needs_recompile = false;
     }
 }
 
@@ -553,16 +563,13 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     debug!("setting up app...");
     let client_copy = client.clone();
-    let app_ctx = tokio::task::spawn_blocking(|| {
-        AppCtx::new(
-            client_copy,
-            config.modules_paths,
-            modules_config,
-            db,
-            config.admin_user_id,
-        )
-    })
-    .await??;
+    let app_ctx = AppCtx::new(
+        client_copy,
+        config.modules_paths,
+        modules_config,
+        db,
+        config.admin_user_id,
+    )?;
     let app = App::new(app_ctx);
 
     let _watcher_guard = watcher(app.inner.clone()).await?;
