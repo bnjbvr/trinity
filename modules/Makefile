@@ -31,7 +31,7 @@ check: bindings ## Check all the component modules in debug mode.
 	cargo check --target wasm32-unknown-unknown
 
 watch: bindings ## Regenerates bindings once and watches for changes in the Rust source files.
-	cargo watch -s "./build-tail.sh"
+	cargo watch -s "make build-tail"
 
 clean: ## Gets rid of the directory target.
 	cargo clean
