@@ -1,5 +1,5 @@
-use crate::wasm::apis::log::trinity::api::log;
 use crate::wasm::ModuleState;
+use crate::wasm::apis::log::trinity::api::log;
 
 wasmtime::component::bindgen!({
     path: "./wit/log.wit",

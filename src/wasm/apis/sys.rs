@@ -1,5 +1,5 @@
-use crate::wasm::apis::sys::trinity::api::sys;
 use crate::wasm::ModuleState;
+use crate::wasm::apis::sys::trinity::api::sys;
 
 wasmtime::component::bindgen!({
     path: "./wit/sys.wit",
