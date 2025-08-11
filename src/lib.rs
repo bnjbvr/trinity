@@ -13,10 +13,12 @@ use matrix_sdk::{
         events::{
             AnyMessageLikeEventContent,
             reaction::ReactionEventContent,
-            relation::Annotation,
+            relation::{Annotation, Thread},
             room::{
                 member::StrippedRoomMemberEvent,
-                message::{MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent},
+                message::{
+                    MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+                },
                 tombstone::OriginalSyncRoomTombstoneEvent,
             },
         },
@@ -457,15 +459,30 @@ async fn on_message(
     })
     .await?;
 
+    // Gather the thread information, if the event's in a thread, so as to be able to reply in the
+    // thread later.
+    let thread_info = if let Some(Relation::Thread(thread)) = ev.content.relates_to {
+        Some(Thread::plain(thread.event_id, ev.event_id.clone()))
+    } else {
+        None
+    };
+
     let new_events: Vec<AnyMessageLikeEventContent> = new_actions
         .into_iter()
         .map(|a| match a {
             wasm::Action::Respond(msg) => {
-                if let Some(html) = msg.html {
-                    RoomMessageEventContent::text_html(msg.text, html).into()
+                let mut new_event = if let Some(html) = msg.html {
+                    RoomMessageEventContent::text_html(msg.text, html)
                 } else {
-                    RoomMessageEventContent::text_plain(msg.text).into()
+                    RoomMessageEventContent::text_plain(msg.text)
+                };
+
+                // Forward the thread information, if available.
+                if let Some(thread_info) = &thread_info {
+                    new_event.relates_to = Some(Relation::Thread(thread_info.clone()));
                 }
+
+                new_event.into()
             }
             wasm::Action::React(reaction) => {
                 ReactionEventContent::new(Annotation::new(ev.event_id.clone(), reaction)).into()
