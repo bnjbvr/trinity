@@ -9,7 +9,8 @@ use matrix_sdk::{
     room::Room,
     ruma::{
         events::{
-            reaction::{ReactionEventContent, Relation},
+            reaction::ReactionEventContent,
+            relation::Annotation,
             room::{
                 member::StrippedRoomMemberEvent,
                 message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
@@ -18,7 +19,7 @@ use matrix_sdk::{
         presence::PresenceState,
         OwnedUserId, RoomId, UserId,
     },
-    Client,
+    Client, RoomState,
 };
 use notify::{RecursiveMode, Watcher};
 use room_resolver::RoomResolver;
@@ -343,10 +344,10 @@ enum AnyEvent {
 }
 
 impl AnyEvent {
-    async fn send(self, room: &mut matrix_sdk::room::Joined) -> anyhow::Result<()> {
+    async fn send(self, room: &mut Room) -> anyhow::Result<()> {
         let _ = match self {
-            AnyEvent::RoomMessage(e) => room.send(e, None).await?,
-            AnyEvent::Reaction(e) => room.send(e, None).await?,
+            AnyEvent::RoomMessage(e) => room.send(e).await?,
+            AnyEvent::Reaction(e) => room.send(e).await?,
         };
         Ok(())
     }
@@ -354,16 +355,14 @@ impl AnyEvent {
 
 async fn on_message(
     ev: SyncRoomMessageEvent,
-    room: Room,
+    mut room: Room,
     client: Client,
     Ctx(ctx): Ctx<App>,
 ) -> anyhow::Result<()> {
-    let mut room = if let Room::Joined(room) = room {
-        room
-    } else {
+    if room.state() != RoomState::Joined {
         // Ignore non-joined rooms events.
         return Ok(());
-    };
+    }
 
     if ev.sender() == client.user_id().unwrap() {
         // Skip messages sent by the bot.
@@ -451,7 +450,7 @@ async fn on_message(
                 }
                 wasm::Action::React(reaction) => {
                     let reaction =
-                        ReactionEventContent::new(Relation::new(event_id.clone(), reaction));
+                        ReactionEventContent::new(Annotation::new(event_id.clone(), reaction));
                     AnyEvent::Reaction(reaction)
                 }
             })
@@ -476,8 +475,8 @@ async fn on_stripped_state_member(
         return;
     }
 
-    // looks like the room is an invited room, let's attempt to join then
-    if let Room::Invited(room) = room {
+    // looks like the room is an invited room, let's attempt to join it, then.
+    if room.state() == RoomState::Invited {
         // The event handlers are called before the next sync begins, but
         // methods that change the state of a room (joining, leaving a room)
         // wait for the sync to return the new room state so we need to spawn
@@ -486,7 +485,7 @@ async fn on_stripped_state_member(
             debug!("Autojoining room {}", room.room_id());
             let mut delay = 1;
 
-            while let Err(err) = room.accept_invitation().await {
+            while let Err(err) = room.join().await {
                 // retry autojoin due to synapse sending invites, before the
                 // invited user can join for more information see
                 // https://github.com/matrix-org/synapse/issues/4345
@@ -513,7 +512,7 @@ async fn on_stripped_state_member(
 pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let client = Client::builder()
         .server_name(config.home_server.as_str().try_into()?)
-        .sled_store(&config.matrix_store_path, None)?
+        .sqlite_store(&config.matrix_store_path, None)
         .build()
         .await?;
 
@@ -522,7 +521,9 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     // First we need to log in.
     debug!("logging in...");
-    let mut login_builder = client.login_username(&config.user_id, &config.password);
+    let mut login_builder = client
+        .matrix_auth()
+        .login_username(&config.user_id, &config.password);
 
     let mut db_device_id = None;
     if let Some(device_id) = admin_table::read_str(&db, DEVICE_ID_ENTRY)
@@ -580,25 +581,24 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     client.add_event_handler(on_stripped_state_member);
 
     // Note: this method will never return.
-    let sync_settings = SyncSettings::default().token(client.sync_token().await.unwrap());
 
     tokio::select! {
         _ = handle_signals() => {
             // Exit :)
         }
 
-        Err(err) = client.sync(sync_settings) => {
+        Err(err) = client.sync(SyncSettings::default()) => {
             anyhow::bail!(err);
         }
     }
 
     // Set bot presence to offline.
     let request = matrix_sdk::ruma::api::client::presence::set_presence::v3::Request::new(
-        client.user_id().unwrap(),
+        client.user_id().unwrap().to_owned(),
         PresenceState::Offline,
     );
 
-    client.send(request, None).await?;
+    client.send(request).await?;
 
     info!("properly exited, have a nice day!");
     Ok(())
