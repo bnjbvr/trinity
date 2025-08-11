@@ -35,7 +35,7 @@ RUN make release
 FROM debian:bookworm-slim
 
 RUN apt-get update && \
-    apt-get install -y ca-certificates && \
+    apt-get install -y ca-certificates sqlite3 && \
     rm -rf /var/lib/apt/lists/* && \
     update-ca-certificates && \
     mkdir -p /opt/trinity/data && \
