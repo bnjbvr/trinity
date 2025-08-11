@@ -411,12 +411,12 @@ async fn on_message(
     let ctx = ctx.inner.clone();
     let room_id = room.room_id().to_owned();
 
-    let event_id = ev.event_id.to_owned();
+    let sender = ev.sender;
 
     let new_actions = tokio::task::spawn_blocking(move || {
         let ctx = &mut *futures::executor::block_on(ctx.lock());
 
-        if ev.sender == ctx.admin_user_id {
+        if sender == ctx.admin_user_id {
             match try_handle_admin(
                 &content,
                 &ctx.admin_user_id,
@@ -432,14 +432,14 @@ async fn on_message(
             }
         }
 
-        if let Some(actions) = try_handle_help(&content, &ev.sender, ctx.modules.iter_mut()) {
+        if let Some(actions) = try_handle_help(&content, &sender, ctx.modules.iter_mut()) {
             trace!("handled by help, skipping modules");
             return vec![actions];
         }
 
         for module in ctx.modules.iter_mut() {
             trace!("trying to handle message with {}...", module.name());
-            match module.handle(&content, &ev.sender, &room_id) {
+            match module.handle(&content, &sender, &room_id) {
                 Ok(actions) => {
                     if !actions.is_empty() {
                         // TODO support handling the same message with several handlers.
@@ -468,7 +468,7 @@ async fn on_message(
                 }
             }
             wasm::Action::React(reaction) => {
-                ReactionEventContent::new(Annotation::new(event_id.clone(), reaction)).into()
+                ReactionEventContent::new(Annotation::new(ev.event_id.clone(), reaction)).into()
             }
         })
         .collect::<Vec<_>>();
