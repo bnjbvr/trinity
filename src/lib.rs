@@ -13,7 +13,7 @@ use matrix_sdk::{
             relation::Annotation,
             room::{
                 member::StrippedRoomMemberEvent,
-                message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
+                message::{MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent},
                 tombstone::OriginalSyncRoomTombstoneEvent,
             },
         },
@@ -389,7 +389,7 @@ async fn on_room_upgrade(ev: OriginalSyncRoomTombstoneEvent, room: Room) {
 }
 
 async fn on_message(
-    ev: SyncRoomMessageEvent,
+    ev: OriginalSyncRoomMessageEvent,
     mut room: Room,
     client: Client,
     Ctx(ctx): Ctx<App>,
@@ -399,101 +399,99 @@ async fn on_message(
         return Ok(());
     }
 
-    if ev.sender() == client.user_id().unwrap() {
-        // Skip messages sent by the bot.
+    if ev.sender == client.user_id().unwrap() {
+        // Skip messages sent by the bot from other devices.
         return Ok(());
     }
 
-    if let Some(unredacted) = ev.as_original() {
-        let content = if let MessageType::Text(text) = &unredacted.content.msgtype {
-            text.body.to_string()
-        } else {
-            // Ignore other kinds of messages at the moment.
-            return Ok(());
-        };
+    let content = if let MessageType::Text(text) = &ev.content.msgtype {
+        text.body.to_string()
+    } else {
+        // Ignore other kinds of messages at the moment.
+        return Ok(());
+    };
 
-        trace!(
-            "Received a message from {} in {}: {}",
-            ev.sender(),
-            room.room_id(),
-            content,
-        );
+    trace!(
+        "Received a message from {} in {}: {}",
+        ev.sender,
+        room.room_id(),
+        content,
+    );
 
-        // TODO ohnoes, locking across other awaits is bad
-        // TODO Use a lock-free data-structure for the list of modules + put locks in the module
-        // internal implementation?
-        // TODO or create a new wasm instance per message \o/
-        let ctx = ctx.inner.clone();
-        let room_id = room.room_id().to_owned();
+    // TODO ohnoes, locking across other awaits is bad
+    // TODO Use a lock-free data-structure for the list of modules + put locks in the module
+    // internal implementation?
+    // TODO or create a new wasm instance per message \o/
+    let ctx = ctx.inner.clone();
+    let room_id = room.room_id().to_owned();
 
-        let event_id = ev.event_id().to_owned();
+    let event_id = ev.event_id.to_owned();
 
-        let new_actions = tokio::task::spawn_blocking(move || {
-            let ctx = &mut *futures::executor::block_on(ctx.lock());
+    let new_actions = tokio::task::spawn_blocking(move || {
+        let ctx = &mut *futures::executor::block_on(ctx.lock());
 
-            if ev.sender() == ctx.admin_user_id {
-                match try_handle_admin(
-                    &content,
-                    &ctx.admin_user_id,
-                    &room_id,
-                    ctx.modules.iter_mut(),
-                    &mut ctx.room_resolver,
-                ) {
-                    None => {}
-                    Some(actions) => {
-                        trace!("handled by admin, skipping modules");
+        if ev.sender == ctx.admin_user_id {
+            match try_handle_admin(
+                &content,
+                &ctx.admin_user_id,
+                &room_id,
+                ctx.modules.iter_mut(),
+                &mut ctx.room_resolver,
+            ) {
+                None => {}
+                Some(actions) => {
+                    trace!("handled by admin, skipping modules");
+                    return actions;
+                }
+            }
+        }
+
+        if let Some(actions) = try_handle_help(&content, &ev.sender, ctx.modules.iter_mut()) {
+            trace!("handled by help, skipping modules");
+            return vec![actions];
+        }
+
+        for module in ctx.modules.iter_mut() {
+            trace!("trying to handle message with {}...", module.name());
+            match module.handle(&content, &ev.sender, &room_id) {
+                Ok(actions) => {
+                    if !actions.is_empty() {
+                        // TODO support handling the same message with several handlers.
+                        trace!("{} returned a response!", module.name());
                         return actions;
                     }
                 }
-            }
-
-            if let Some(actions) = try_handle_help(&content, ev.sender(), ctx.modules.iter_mut()) {
-                trace!("handled by help, skipping modules");
-                return vec![actions];
-            }
-
-            for module in ctx.modules.iter_mut() {
-                trace!("trying to handle message with {}...", module.name());
-                match module.handle(&content, ev.sender(), &room_id) {
-                    Ok(actions) => {
-                        if !actions.is_empty() {
-                            // TODO support handling the same message with several handlers.
-                            trace!("{} returned a response!", module.name());
-                            return actions;
-                        }
-                    }
-                    Err(err) => {
-                        warn!("wasm module {} ran into an error: {err}", module.name());
-                    }
+                Err(err) => {
+                    warn!("wasm module {} ran into an error: {err}", module.name());
                 }
             }
-
-            Vec::new()
-        })
-        .await?;
-
-        let new_events = new_actions
-            .into_iter()
-            .map(|a| match a {
-                wasm::Action::Respond(msg) => {
-                    let content = if let Some(html) = msg.html {
-                        RoomMessageEventContent::text_html(msg.text, html)
-                    } else {
-                        RoomMessageEventContent::text_plain(msg.text)
-                    };
-                    AnyEvent::RoomMessage(content)
-                }
-                wasm::Action::React(reaction) => {
-                    let reaction =
-                        ReactionEventContent::new(Annotation::new(event_id.clone(), reaction));
-                    AnyEvent::Reaction(reaction)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        for event in new_events {
-            event.send(&mut room).await?;
         }
+
+        Vec::new()
+    })
+    .await?;
+
+    let new_events = new_actions
+        .into_iter()
+        .map(|a| match a {
+            wasm::Action::Respond(msg) => {
+                let content = if let Some(html) = msg.html {
+                    RoomMessageEventContent::text_html(msg.text, html)
+                } else {
+                    RoomMessageEventContent::text_plain(msg.text)
+                };
+                AnyEvent::RoomMessage(content)
+            }
+            wasm::Action::React(reaction) => {
+                let reaction =
+                    ReactionEventContent::new(Annotation::new(event_id.clone(), reaction));
+                AnyEvent::Reaction(reaction)
+            }
+        })
+        .collect::<Vec<_>>();
+
+    for event in new_events {
+        event.send(&mut room).await?;
     }
 
     Ok(())
