@@ -16,6 +16,7 @@ use matrix_sdk::{
                 message::{MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent},
                 tombstone::OriginalSyncRoomTombstoneEvent,
             },
+            AnyMessageLikeEventContent,
         },
         presence::PresenceState,
         OwnedUserId, RoomId, UserId,
@@ -339,21 +340,6 @@ fn try_handle_help<'a>(
     }));
 }
 
-enum AnyEvent {
-    RoomMessage(RoomMessageEventContent),
-    Reaction(ReactionEventContent),
-}
-
-impl AnyEvent {
-    async fn send(self, room: &mut Room) -> anyhow::Result<()> {
-        let _ = match self {
-            AnyEvent::RoomMessage(e) => room.send(e).await?,
-            AnyEvent::Reaction(e) => room.send(e).await?,
-        };
-        Ok(())
-    }
-}
-
 /// After a room has been upgraded, automatically attempt to join the new room.
 async fn on_room_upgrade(ev: OriginalSyncRoomTombstoneEvent, room: Room) {
     let content = ev.content;
@@ -390,7 +376,7 @@ async fn on_room_upgrade(ev: OriginalSyncRoomTombstoneEvent, room: Room) {
 
 async fn on_message(
     ev: OriginalSyncRoomMessageEvent,
-    mut room: Room,
+    room: Room,
     client: Client,
     Ctx(ctx): Ctx<App>,
 ) -> anyhow::Result<()> {
@@ -471,27 +457,24 @@ async fn on_message(
     })
     .await?;
 
-    let new_events = new_actions
+    let new_events: Vec<AnyMessageLikeEventContent> = new_actions
         .into_iter()
         .map(|a| match a {
             wasm::Action::Respond(msg) => {
-                let content = if let Some(html) = msg.html {
-                    RoomMessageEventContent::text_html(msg.text, html)
+                if let Some(html) = msg.html {
+                    RoomMessageEventContent::text_html(msg.text, html).into()
                 } else {
-                    RoomMessageEventContent::text_plain(msg.text)
-                };
-                AnyEvent::RoomMessage(content)
+                    RoomMessageEventContent::text_plain(msg.text).into()
+                }
             }
             wasm::Action::React(reaction) => {
-                let reaction =
-                    ReactionEventContent::new(Annotation::new(event_id.clone(), reaction));
-                AnyEvent::Reaction(reaction)
+                ReactionEventContent::new(Annotation::new(event_id.clone(), reaction)).into()
             }
         })
         .collect::<Vec<_>>();
 
     for event in new_events {
-        event.send(&mut room).await?;
+        room.send(event).await?;
     }
 
     Ok(())
