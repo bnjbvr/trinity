@@ -19,7 +19,7 @@ use matrix_sdk::{
         presence::PresenceState,
         OwnedUserId, RoomId, UserId,
     },
-    Client, RoomState,
+    Client, LoopCtrl, RoomState,
 };
 use notify::{RecursiveMode, Watcher};
 use room_resolver::RoomResolver;
@@ -508,16 +508,49 @@ async fn on_stripped_state_member(
     }
 }
 
+async fn run_migrations(config: &BotConfig, db: &ShareableDatabase) -> anyhow::Result<()> {
+    let version = admin_table::read_u64(&db, admin_table::VERSION_ENTRY)
+        .context("reading version from the database")?
+        .unwrap_or(0);
+
+    if version < 1 {
+        // If no version is set, we assume this is the first run, which happens after the sdk bump.
+        // In this case, the state is likely outdated in the database, so we remove the database
+        // directory first, and then drop the device id, so as to create a new one.
+        debug!("running data migration 1: removing old database directory and dropping device id");
+
+        // Remove the database directory.
+        if let Err(err) = fs::remove_dir_all(&config.matrix_store_path) {
+            warn!("failed to remove old database directory: {err:#}");
+        }
+
+        // Drop the device id, so that a new one is created on the next login.
+        if let Err(err) =
+            admin_table::remove(&db, DEVICE_ID_ENTRY).context("dropping device_id in the database")
+        {
+            warn!("failed to drop device_id: {err:#}");
+        }
+
+        // Bump the version to 1.
+        admin_table::write_u64(&db, admin_table::VERSION_ENTRY, 1)
+            .context("writing initial version into the database")?;
+    }
+
+    Ok(())
+}
+
 /// Run the client for the given `BotConfig`.
 pub async fn run(config: BotConfig) -> anyhow::Result<()> {
+    // Create the database, and try to find a device id.
+    let db = Arc::new(unsafe { redb::Database::create(config.redb_path.clone(), 1024 * 1024)? });
+
+    run_migrations(&config, &db).await?;
+
     let client = Client::builder()
         .server_name(config.home_server.as_str().try_into()?)
         .sqlite_store(&config.matrix_store_path, None)
         .build()
         .await?;
-
-    // Create the database, and try to find a device id.
-    let db = Arc::new(unsafe { redb::Database::create(config.redb_path, 1024 * 1024)? });
 
     // First we need to log in.
     debug!("logging in...");
@@ -558,9 +591,12 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
     // An initial sync to set up state and so our bot doesn't respond to old
     // messages. If the `StateStore` finds saved state in the location given the
-    // initial sync will be skipped in favor of loading state from the store
+    // initial sync will be skipped in favor of loading state from the store.
     debug!("starting initial sync...");
-    client.sync_once(SyncSettings::default()).await.unwrap();
+    client
+        .sync_with_callback(SyncSettings::default(), |_| async { LoopCtrl::Break })
+        .await
+        .unwrap();
 
     debug!("setting up app...");
     let client_copy = client.clone();

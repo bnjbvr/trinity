@@ -8,6 +8,9 @@ const ADMIN_TABLE: redb::TableDefinition<str, [u8]> = redb::TableDefinition::new
 /// Key for the `device_id` value in the admin table.
 pub const DEVICE_ID_ENTRY: &str = "device_id";
 
+/// Key for the `version` value in the admin table.
+pub const VERSION_ENTRY: &str = "version";
+
 /// Reads a given key in the admin table from the database.
 ///
 /// Returns `Ok(None)` if the value wasn't present, `Ok(Some)` if it did exist.
@@ -39,6 +42,20 @@ pub fn read_str(db: &ShareableDatabase, key: &str) -> anyhow::Result<Option<Stri
     }
 }
 
+/// Same as [`read`], but for a u64 value.
+pub fn read_u64(db: &ShareableDatabase, key: &str) -> anyhow::Result<Option<u64>> {
+    match read(db, key)? {
+        Some(bytes) if bytes.len() == 8 => Ok(Some(u64::from_le_bytes(
+            bytes.as_slice().try_into().unwrap(),
+        ))),
+        Some(_) => Err(anyhow::anyhow!(
+            "Value for key '{}' is not a valid u64",
+            key
+        )),
+        None => Ok(None),
+    }
+}
+
 /// Writes a given key in the admin table from the database.
 pub fn write(db: &ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<()> {
     let txn = db.begin_write()?;
@@ -53,4 +70,19 @@ pub fn write(db: &ShareableDatabase, key: &str, value: &[u8]) -> anyhow::Result<
 /// Same as [`write`], but for a string ref.
 pub fn write_str(db: &ShareableDatabase, key: &str, value: &str) -> anyhow::Result<()> {
     write(db, key, value.as_bytes())
+}
+
+/// Same as [`write`], but for a u64.
+pub fn write_u64(db: &ShareableDatabase, key: &str, value: u64) -> anyhow::Result<()> {
+    write(db, key, &value.to_le_bytes())
+}
+
+pub fn remove(db: &ShareableDatabase, key: &str) -> anyhow::Result<()> {
+    let txn = db.begin_write()?;
+    {
+        let mut table = txn.open_table(ADMIN_TABLE)?;
+        table.remove(key)?;
+    }
+    txn.commit()?;
+    Ok(())
 }
