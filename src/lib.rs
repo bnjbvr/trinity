@@ -14,6 +14,7 @@ use matrix_sdk::{
             room::{
                 member::StrippedRoomMemberEvent,
                 message::{MessageType, RoomMessageEventContent, SyncRoomMessageEvent},
+                tombstone::OriginalSyncRoomTombstoneEvent,
             },
         },
         presence::PresenceState,
@@ -353,6 +354,40 @@ impl AnyEvent {
     }
 }
 
+/// After a room has been upgraded, automatically attempt to join the new room.
+async fn on_room_upgrade(ev: OriginalSyncRoomTombstoneEvent, room: Room) {
+    let content = ev.content;
+
+    let alias_or_id = if let Some(alias) = room.canonical_alias() {
+        alias.to_string()
+    } else {
+        room.room_id().to_string()
+    };
+
+    debug!(
+        %alias_or_id,
+        reason = content.body,
+        "Room was upgraded, joining the new room.",
+    );
+
+    match room
+        .client()
+        .join_room_by_id(&content.replacement_room)
+        .await
+    {
+        Ok(_) => {
+            debug!("Successfully joined the upgraded room.");
+        }
+        Err(err) => {
+            warn!(
+                from = alias_or_id,
+                to = %content.replacement_room,
+                "Couldn't join the upgraded room: {err}"
+            );
+        }
+    }
+}
+
 async fn on_message(
     ev: SyncRoomMessageEvent,
     mut room: Room,
@@ -614,6 +649,7 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     debug!("setup ready! now listening to incoming messages.");
     client.add_event_handler_context(app);
     client.add_event_handler(on_message);
+    client.add_event_handler(on_room_upgrade);
     client.add_event_handler(on_stripped_state_member);
 
     // Note: this method will never return.
