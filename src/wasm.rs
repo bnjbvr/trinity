@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use matrix_sdk::ruma::{RoomId, UserId};
 
-use crate::{wasm::apis::Apis, ShareableDatabase};
+use crate::{ShareableDatabase, wasm::apis::Apis};
 
 pub struct ModuleState {
     apis: Apis,

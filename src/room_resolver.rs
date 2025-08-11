@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use matrix_sdk::{
-    ruma::{OwnedRoomAliasId, OwnedRoomId},
     Client,
+    ruma::{OwnedRoomAliasId, OwnedRoomId},
 };
 
 pub(super) struct RoomResolver {

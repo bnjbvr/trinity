@@ -1,5 +1,5 @@
-use crate::wasm::apis::sync_request::trinity::api::sync_request;
 use crate::wasm::ModuleState;
+use crate::wasm::apis::sync_request::trinity::api::sync_request;
 
 wasmtime::component::bindgen!({
     path: "./wit/sync-request.wit",

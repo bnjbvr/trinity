@@ -4,11 +4,14 @@ mod wasm;
 
 use anyhow::Context;
 use matrix_sdk::{
+    Client, LoopCtrl, RoomState,
     config::SyncSettings,
     event_handler::Ctx,
     room::Room,
     ruma::{
+        OwnedUserId, RoomId, UserId,
         events::{
+            AnyMessageLikeEventContent,
             reaction::ReactionEventContent,
             relation::Annotation,
             room::{
@@ -16,12 +19,9 @@ use matrix_sdk::{
                 message::{MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent},
                 tombstone::OriginalSyncRoomTombstoneEvent,
             },
-            AnyMessageLikeEventContent,
         },
         presence::PresenceState,
-        OwnedUserId, RoomId, UserId,
     },
-    Client, LoopCtrl, RoomState,
 };
 use notify::{RecursiveMode, Watcher};
 use room_resolver::RoomResolver;
@@ -29,7 +29,7 @@ use serde::Deserialize;
 use std::{collections::HashMap, env, fs, path::PathBuf, sync::Arc};
 use tokio::{
     sync::Mutex,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tracing::{debug, error, info, trace, warn};
 use wasm::{Module, WasmModules};

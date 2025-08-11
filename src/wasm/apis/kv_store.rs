@@ -1,8 +1,8 @@
 use redb::{ReadableTable as _, TableDefinition};
 
-use crate::wasm::apis::kv_store::trinity::api::kv;
-use crate::wasm::ModuleState;
 use crate::ShareableDatabase;
+use crate::wasm::ModuleState;
+use crate::wasm::apis::kv_store::trinity::api::kv;
 
 wasmtime::component::bindgen!({
     path: "./wit/kv.wit",
