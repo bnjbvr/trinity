@@ -109,9 +109,7 @@ pub mod trinity {
     }
 }
 #[cfg(target_arch = "wasm32")]
-#[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:trinity:api:log-world:encoded world"
-)]
+#[unsafe(link_section = "component-type:wit-bindgen:0.41.0:trinity:api:log-world:encoded world")]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
 pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 238] = *b"\
