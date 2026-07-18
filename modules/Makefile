@@ -29,6 +29,7 @@ release: bindings
 
 check: bindings ## Check all the component modules in debug mode.
 	cargo check --target wasm32-unknown-unknown
+	cargo fmt
 
 watch: bindings ## Regenerates bindings once and watches for changes in the Rust source files.
 	cargo watch -s "make build-tail"
