@@ -36,7 +36,7 @@ jobs:
 
       - name: Check host
         run: |
-          cargo check --all --verbose
+          cargo check --all
 
   ci-modules:
     env:
