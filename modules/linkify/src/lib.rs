@@ -222,7 +222,7 @@ impl TrinityCommand for Component {
                 _ => "Invalid command!".into(),
             }
         } else {
-            "Create regex based substition rules per channel! Help topics: admin".to_owned()
+            "Create regex based substitution rules per channel! Help topics: admin".to_owned()
         }
     }
 
