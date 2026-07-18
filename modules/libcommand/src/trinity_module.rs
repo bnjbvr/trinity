@@ -658,9 +658,7 @@ contents\x09author-ids\x0bauthor-names\x04rooms\0\x0c\x04\0\x06on-msg\x01\x0e\x0
 #[doc(inline)]
 pub use __export_trinity_module_impl as export;
 #[cfg(target_arch = "wasm32")]
-#[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:trinity:module:trinity-module-with-all-of-its-exports-removed:encoded world"
-)]
+#[unsafe(link_section = "component-type:wit-bindgen:0.41.0:trinity:module:trinity-module-with-all-of-its-exports-removed:encoded world")]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
 pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 236] = *b"\
