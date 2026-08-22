@@ -36,7 +36,7 @@ impl Module {
         self.name.as_str()
     }
 
-    pub fn help(&mut self, topic: Option<&str>) -> anyhow::Result<String> {
+    pub fn help(&mut self, topic: Option<&str>) -> wasmtime::Result<String> {
         self.instance
             .trinity_module_messaging()
             .call_help(&mut self.store, topic)
@@ -47,7 +47,7 @@ impl Module {
         cmd: &str,
         sender: &UserId,
         room: &str,
-    ) -> anyhow::Result<Vec<messaging::Action>> {
+    ) -> wasmtime::Result<Vec<messaging::Action>> {
         self.instance.trinity_module_messaging().call_admin(
             &mut self.store,
             cmd,
@@ -61,7 +61,7 @@ impl Module {
         content: &str,
         sender: &UserId,
         room: &RoomId,
-    ) -> anyhow::Result<Vec<messaging::Action>> {
+    ) -> wasmtime::Result<Vec<messaging::Action>> {
         self.instance.trinity_module_messaging().call_on_msg(
             &mut self.store,
             content,

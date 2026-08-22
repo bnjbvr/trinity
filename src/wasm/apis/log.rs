@@ -18,7 +18,7 @@ impl LogApi {
     }
 
     pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> wasmtime::Result<()> {
-        log::add_to_linker(linker, move |s| &mut s.apis.log)
+        log::add_to_linker::<_, wasmtime::component::HasSelf<_>>(linker, move |s| &mut s.apis.log)
     }
 }
 
