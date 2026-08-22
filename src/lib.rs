@@ -6,6 +6,7 @@ use anyhow::Context;
 use matrix_sdk::{
     Client, LoopCtrl, RoomState,
     config::SyncSettings,
+    encryption::{BackupDownloadStrategy, EncryptionSettings, recovery::RecoveryState},
     event_handler::Ctx,
     room::Room,
     ruma::{
@@ -57,6 +58,10 @@ pub struct BotConfig {
     pub modules_paths: Vec<PathBuf>,
     /// module specific configuration to forward to corresponding handler.
     pub modules_config: Option<HashMap<String, HashMap<String, String>>>,
+    /// Password/key used for the recovery subsystem of the rust sdk.
+    ///
+    /// Do not confuse with the "recovery key" concept from the matrix spec.
+    pub recovery_key: Option<String>,
 }
 
 impl BotConfig {
@@ -100,6 +105,8 @@ impl BotConfig {
             .try_into()
             .context("impossible to parse admin user id")?;
 
+        let recovery_key = env::var("RECOVERY_KEY").ok();
+
         // Read the module paths (separated by commas), check they exist, and return the whole
         // list.
         let modules_paths = env::var("MODULES_PATHS")
@@ -128,6 +135,7 @@ impl BotConfig {
             redb_path,
             modules_paths,
             modules_config: None,
+            recovery_key,
         })
     }
 }
@@ -585,6 +593,11 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     let client = Client::builder()
         .server_name(config.home_server.as_str().try_into()?)
         .sqlite_store(&config.matrix_store_path, None)
+        .with_encryption_settings(EncryptionSettings {
+            auto_enable_cross_signing: true,
+            backup_download_strategy: BackupDownloadStrategy::AfterDecryptionFailure,
+            auto_enable_backups: true,
+        })
         .build()
         .await?;
 
@@ -619,11 +632,35 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
             .context("writing new device_id into the database")?;
     }
 
-    let modules_config = config.modules_config.unwrap_or_else(HashMap::new);
-
     client
         .user_id()
         .context("impossible state: missing user id for the logged in bot?")?;
+
+    // We're logged in now. Set up encryption cross-signing, before setting up sync.
+    {
+        let encryption = client.encryption();
+
+        trace!("waiting for e2ee initialization tasks…");
+        encryption.wait_for_e2ee_initialization_tasks().await;
+        trace!("done!");
+
+        if let Some(recovery_key) = config.recovery_key {
+            let recovery = encryption.recovery();
+            if recovery.state() == RecoveryState::Disabled {
+                trace!("trying to set up recovery…");
+                if let Err(err) = recovery
+                    .enable()
+                    .wait_for_backups_to_upload()
+                    .with_passphrase(&recovery_key)
+                    .await
+                {
+                    error!("error while setting up the recovery key: {err}")
+                } else {
+                    trace!("done!");
+                }
+            }
+        }
+    }
 
     // An initial sync to set up state and so our bot doesn't respond to old
     // messages. If the `StateStore` finds saved state in the location given the
@@ -635,9 +672,10 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
         .unwrap();
 
     debug!("setting up app...");
-    let client_copy = client.clone();
+    let modules_config = config.modules_config.unwrap_or_else(HashMap::new);
+    let client_clone = client.clone();
     let app_ctx = AppCtx::new(
-        client_copy,
+        client_clone,
         config.modules_paths,
         modules_config,
         db,
