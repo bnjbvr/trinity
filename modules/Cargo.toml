@@ -20,8 +20,8 @@ members = [
 ]
 
 [workspace.dependencies]
-wit-bindgen = "0.41.0"
-wit-bindgen-rt = "0.41.0"
+wit-bindgen = "0.60.0"
+wit-bindgen-rt = "0.44.0"
 
 libcommand = { path = "./libcommand" }
 wit-kv = { path = "./wit-kv" }
