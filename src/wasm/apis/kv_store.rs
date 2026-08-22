@@ -22,8 +22,10 @@ impl KeyValueStoreApi {
         })
     }
 
-    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> anyhow::Result<()> {
-        kv::add_to_linker(linker, move |s| &mut s.apis.kv_store)
+    pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> wasmtime::Result<()> {
+        kv::add_to_linker::<_, wasmtime::component::HasSelf<_>>(linker, move |s| {
+            &mut s.apis.kv_store
+        })
     }
 
     fn set_impl(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {

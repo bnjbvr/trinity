@@ -158,7 +158,10 @@ impl AppCtx {
 
         let mut config = wasmtime::Config::new();
         config.wasm_component_model(true);
-        config.cache_config_load_default()?;
+
+        // Provide a basic cache to avoid recompilation of modules.
+        let cache = wasmtime::Cache::new(wasmtime::CacheConfig::from_file(None)?)?;
+        config.cache(Some(cache));
 
         let engine = wasmtime::Engine::new(&config)?;
 

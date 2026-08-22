@@ -10,7 +10,9 @@ pub(super) struct SysApi;
 
 impl SysApi {
     pub fn link(linker: &mut wasmtime::component::Linker<ModuleState>) -> wasmtime::Result<()> {
-        sys::add_to_linker(linker, move |s| &mut s.apis.sys)
+        sys::add_to_linker::<ModuleState, wasmtime::component::HasSelf<_>>(linker, move |s| {
+            &mut s.apis.sys
+        })
     }
 }
 
