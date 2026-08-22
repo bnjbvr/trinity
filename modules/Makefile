@@ -6,7 +6,7 @@ build-tail:
 
 install-tools: ## Install all the tools necessary to build the components.
 	# Keep those values in sync with the main CI workflow!
-	cargo install --locked wit-bindgen-cli@0.41.0 --force
+	cargo install --locked wit-bindgen-cli@0.60.0 --force
 	cargo install --locked wasm-tools@1.229.0 --force
 
 bindings: ## Regenerate the Rust bindings from the WIT files, for the libraries.

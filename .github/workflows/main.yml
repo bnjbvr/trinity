@@ -79,9 +79,9 @@ jobs:
           chmod +x wasm-tools
           mv wasm-tools /usr/local/bin
 
-          wget https://github.com/bytecodealliance/wit-bindgen/releases/download/v0.41.0/wit-bindgen-0.41.0-x86_64-linux.tar.gz
-          tar pfx wit-bindgen-0.41.0-x86_64-linux.tar.gz
-          mv wit-bindgen-0.41.0-x86_64-linux/wit-bindgen .
+          wget https://github.com/bytecodealliance/wit-bindgen/releases/download/v0.60.0/wit-bindgen-0.60.0-x86_64-linux.tar.gz
+          tar pfx wit-bindgen-0.60.0-x86_64-linux.tar.gz
+          mv wit-bindgen-0.60.0-x86_64-linux/wit-bindgen .
           chmod +x wit-bindgen
           mv wit-bindgen /usr/local/bin
 
