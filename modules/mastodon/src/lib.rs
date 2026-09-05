@@ -35,7 +35,7 @@ impl TrinityCommand for Component {
 - disallow #USER_ID
 - list-posters"#
                     .into(),
-                "toot" | "!toot" => "Toot a message with !toot MESSAGE".into(),
+                "toot" | "!toot" => "Toot a message with !toot MESSAGE. Optionally add `@lang=en-us` to specify the toot's language.".into(),
                 _ => "i don't know this command!".into(),
             }
         } else {
@@ -44,12 +44,11 @@ impl TrinityCommand for Component {
     }
 
     fn on_msg(client: &mut CommandClient, content: &str) {
-        let Some(content) = content.strip_prefix("!toot").map(|rest| rest.trim()) else {
+        let Some(content) = content.strip_prefix("!toot") else {
             return;
         };
 
         let author_id = client.from();
-        let content: &str = &content;
         let room = client.room();
 
         let Ok(Some(mut config)) = wit_kv::get::<_, RoomConfig>(room) else {
@@ -68,10 +67,26 @@ impl TrinityCommand for Component {
         #[derive(serde::Serialize)]
         struct Request {
             status: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            language: Option<String>,
+        }
+
+        let mut content = content.trim();
+
+        // Optionally pass a language with `@lang=fr-fr`, for instance.
+        let mut language = None;
+        if let Some(rest) = content.strip_prefix("@lang=") {
+            if let Some((lhs, rhs)) = rest.split_once(" ") {
+                content = rhs;
+                language = Some(lhs.to_owned());
+            } else {
+                return client.respond("error with @lang: missing space after config");
+            }
         }
 
         let body = serde_json::to_string(&Request {
             status: content.to_owned(),
+            language,
         })
         .unwrap();
 
@@ -90,7 +105,7 @@ impl TrinityCommand for Component {
                 "request failed with non-success status code:\n\t{:?}",
                 resp.body
             );
-            return client.respond("error when sending toot, see logs!".to_owned());
+            return client.respond("error when sending toot, see logs!");
         }
 
         client.react_with_ok();
