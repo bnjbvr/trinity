@@ -646,17 +646,41 @@ pub async fn run(config: BotConfig) -> anyhow::Result<()> {
 
         if let Some(recovery_key) = config.recovery_key {
             let recovery = encryption.recovery();
-            if recovery.state() == RecoveryState::Disabled {
-                trace!("trying to set up recovery…");
-                if let Err(err) = recovery
-                    .enable()
-                    .wait_for_backups_to_upload()
-                    .with_passphrase(&recovery_key)
-                    .await
-                {
-                    error!("error while setting up the recovery key: {err}")
-                } else {
-                    trace!("done!");
+
+            let state = recovery.state();
+            info!("Recovery state (SSSS and key backup) before action: {state:?}");
+
+            match state {
+                RecoveryState::Unknown => {
+                    // This shouldn't happen in practice, because we've called "wait_for_e2ee_initialization_tasks" just above.
+                    warn!("unexpected unknown recovery state");
+                }
+
+                RecoveryState::Enabled => {}
+
+                RecoveryState::Disabled => {
+                    info!("trying to set up recovery…");
+                    if let Err(err) = recovery
+                        .enable()
+                        .wait_for_backups_to_upload()
+                        .with_passphrase(&recovery_key)
+                        .await
+                    {
+                        error!("error while setting up recovery for the first time: {err}")
+                    } else {
+                        info!(recovery_state = ?recovery.state(), "successfully set up recovery!");
+                    }
+                }
+
+                RecoveryState::Incomplete => {
+                    info!(
+                        "recovery is enabled server-side, but we're missing secrets; reloading with provided recovery key…"
+                    );
+                    if let Err(err) = recovery.recover(&recovery_key).await {
+                        error!("error while restoring recovery: {err}")
+                    } else {
+                        info!(recovery_state = ?recovery.state(), "successfully restored recovery!");
+                    }
                 }
             }
         }
