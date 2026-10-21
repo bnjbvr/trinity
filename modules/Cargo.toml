@@ -12,6 +12,7 @@ members = [
     "./memos",
     "./openai",
     "./silverbullet",
+    "./ics",
 
     # Libs
     "./libcommand",

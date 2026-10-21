@@ -1,0 +1,15 @@
+[package]
+name = "ics"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libcommand.workspace = true
+wit-log.workspace = true
+time = { version = "0.3.55", features = ["formatting", "macros", "parsing"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.component]
+target.path = "../../wit/trinity-module.wit"
