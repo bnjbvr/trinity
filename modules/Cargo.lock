@@ -264,7 +264,6 @@ version = "0.1.0"
 dependencies = [
  "libcommand",
  "serde",
- "serde_json",
  "wit-kv",
  "wit-log",
  "wit-sync-request",
