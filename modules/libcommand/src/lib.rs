@@ -33,6 +33,14 @@ fn consume_client(client: CommandClient) -> Vec<module::messaging::Action> {
             .map(|reaction| module::messaging::Action::React(reaction)),
     );
 
+    actions.extend(client.binaries.into_iter().map(|bin| {
+        module::messaging::Action::Upload(module::messaging::File {
+            content: bin.buffer,
+            name: bin.name,
+            legend: bin.legend,
+        })
+    }));
+
     actions
 }
 
@@ -75,11 +83,18 @@ impl<T: TrinityCommand> module::messaging::Guest for T {
 
 pub struct Recipient(pub String);
 
+pub struct File {
+    pub buffer: Vec<u8>,
+    pub name: String,
+    pub legend: Option<String>,
+}
+
 pub struct CommandClient {
     inbound_msg_room: String,
     inbound_msg_author: String,
     pub messages: Vec<(Recipient, String)>,
     pub reactions: Vec<String>,
+    pub binaries: Vec<File>,
 }
 
 impl CommandClient {
@@ -89,6 +104,7 @@ impl CommandClient {
             inbound_msg_author: author,
             messages: Default::default(),
             reactions: Default::default(),
+            binaries: Vec::new(),
         }
     }
 
@@ -118,6 +134,10 @@ impl CommandClient {
 
     pub fn react_with_ok(&mut self) {
         self.react_with("👌".to_owned());
+    }
+
+    pub fn upload(&mut self, file: File) {
+        self.binaries.push(file);
     }
 }
 

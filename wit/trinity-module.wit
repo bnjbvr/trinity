@@ -7,11 +7,18 @@ interface messaging {
         to: string
     }
 
+    record file {
+        content: list<u8>,
+        name: string,
+        legend: option<string>,
+    }
+
     type reaction = string;
 
     variant action {
         respond(message),
-        react(reaction)
+        react(reaction),
+        upload(file),
     }
 
     init: func(config: option<list<tuple<string, string>>>);
