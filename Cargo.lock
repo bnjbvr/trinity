@@ -4658,6 +4658,7 @@ dependencies = [
  "dotenvy",
  "futures",
  "matrix-sdk",
+ "mime",
  "notify",
  "rand 0.8.7",
  "rayon",

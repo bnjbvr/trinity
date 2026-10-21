@@ -5,6 +5,7 @@ mod wasm;
 use anyhow::Context;
 use matrix_sdk::{
     Client, LoopCtrl, RoomState,
+    attachment::AttachmentConfig,
     config::SyncSettings,
     encryption::{BackupDownloadStrategy, EncryptionSettings, recovery::RecoveryState},
     event_handler::Ctx,
@@ -19,6 +20,7 @@ use matrix_sdk::{
                 member::StrippedRoomMemberEvent,
                 message::{
                     MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+                    TextMessageEventContent,
                 },
                 tombstone::OriginalSyncRoomTombstoneEvent,
             },
@@ -478,9 +480,10 @@ async fn on_message(
         None
     };
 
+    let mut files = Vec::new();
     let new_events: Vec<AnyMessageLikeEventContent> = new_actions
         .into_iter()
-        .map(|a| match a {
+        .filter_map(|a| match a {
             wasm::Action::Respond(msg) => {
                 let mut new_event = if let Some(html) = msg.html {
                     RoomMessageEventContent::text_html(msg.text, html)
@@ -493,16 +496,32 @@ async fn on_message(
                     new_event.relates_to = Some(Relation::Thread(thread_info.clone()));
                 }
 
-                new_event.into()
+                Some(new_event.into())
             }
-            wasm::Action::React(reaction) => {
-                ReactionEventContent::new(Annotation::new(ev.event_id.clone(), reaction)).into()
+
+            wasm::Action::React(reaction) => Some(
+                ReactionEventContent::new(Annotation::new(ev.event_id.clone(), reaction)).into(),
+            ),
+
+            wasm::Action::Upload(file) => {
+                files.push(file);
+                None
             }
         })
         .collect::<Vec<_>>();
 
     for event in new_events {
         room.send(event).await?;
+    }
+
+    for f in files {
+        let content_type = mime::STAR_STAR;
+        let mut config = AttachmentConfig::new();
+        if let Some(caption) = f.legend {
+            config = config.caption(Some(TextMessageEventContent::plain(caption)));
+        }
+        room.send_attachment(f.name, &content_type, f.content, config)
+            .await?;
     }
 
     Ok(())
