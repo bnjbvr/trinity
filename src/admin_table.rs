@@ -1,9 +1,9 @@
-use redb::ReadableTable;
+use redb::ReadableDatabase as _;
 
 use crate::ShareableDatabase;
 
 /// Name of the admin table. Can be kept internal.
-const ADMIN_TABLE: redb::TableDefinition<str, [u8]> = redb::TableDefinition::new("@admin");
+const ADMIN_TABLE: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("@admin");
 
 /// Key for the `device_id` value in the admin table.
 pub const DEVICE_ID_ENTRY: &str = "device_id";
@@ -18,20 +18,10 @@ pub fn read(db: &ShareableDatabase, key: &str) -> anyhow::Result<Option<Vec<u8>>
     let txn = db.begin_read()?;
     let table = match txn.open_table(ADMIN_TABLE) {
         Ok(table) => table,
-        Err(err) => match err {
-            redb::Error::DatabaseAlreadyOpen
-            | redb::Error::InvalidSavepoint
-            | redb::Error::Corrupted(_)
-            | redb::Error::TableTypeMismatch(_)
-            | redb::Error::DbSizeMismatch { .. }
-            | redb::Error::TableAlreadyOpen(_, _)
-            | redb::Error::OutOfSpace
-            | redb::Error::Io(_)
-            | redb::Error::LockPoisoned(_) => Err(err)?,
-            redb::Error::TableDoesNotExist(_) => return Ok(None),
-        },
+        Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
+        Err(err) => return Err(err.into()),
     };
-    Ok(table.get(key)?.map(|val| val.to_vec()))
+    Ok(table.get(key)?.map(|val| val.value().to_vec()))
 }
 
 /// Same as [`read`], but for a string value.

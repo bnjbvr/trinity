@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-uuid = "1.2.1"
+uuid = "1.28.0"
 
 libcommand.workspace = true
 wit-sys.workspace = true

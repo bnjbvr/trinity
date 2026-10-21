@@ -1,4 +1,4 @@
-use redb::{ReadableTable as _, TableDefinition};
+use redb::{ReadableDatabase as _, TableDefinition};
 
 use crate::ShareableDatabase;
 use crate::wasm::ModuleState;
@@ -29,43 +29,33 @@ impl KeyValueStoreApi {
     }
 
     fn set_impl(&mut self, key: Vec<u8>, value: Vec<u8>) -> anyhow::Result<()> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
+        let table_def = TableDefinition::<&[u8], &[u8]>::new(&self.module_name);
         let txn = self.db.begin_write()?;
         {
             let mut table = txn.open_table(table_def)?;
-            table.insert(&key, &value)?;
+            table.insert(key.as_slice(), value.as_slice())?;
         }
         txn.commit()?;
         Ok(())
     }
 
     fn get_impl(&mut self, key: Vec<u8>) -> anyhow::Result<Option<Vec<u8>>> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
+        let table_def = TableDefinition::<&[u8], &[u8]>::new(&self.module_name);
         let txn = self.db.begin_read()?;
         let table = match txn.open_table(table_def) {
             Ok(table) => table,
-            Err(err) => match err {
-                redb::Error::DatabaseAlreadyOpen
-                | redb::Error::InvalidSavepoint
-                | redb::Error::Corrupted(_)
-                | redb::Error::TableTypeMismatch(_)
-                | redb::Error::DbSizeMismatch { .. }
-                | redb::Error::TableAlreadyOpen(_, _)
-                | redb::Error::OutOfSpace
-                | redb::Error::Io(_)
-                | redb::Error::LockPoisoned(_) => Err(err)?,
-                redb::Error::TableDoesNotExist(_) => return Ok(None),
-            },
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(None),
+            Err(err) => return Err(err.into()),
         };
-        Ok(table.get(&key)?.map(|val| val.to_vec()))
+        Ok(table.get(key.as_slice())?.map(|val| val.value().to_vec()))
     }
 
     fn remove_impl(&mut self, key: Vec<u8>) -> anyhow::Result<()> {
-        let table_def = TableDefinition::<[u8], [u8]>::new(&self.module_name);
+        let table_def = TableDefinition::<&[u8], &[u8]>::new(&self.module_name);
         let txn = self.db.begin_write()?;
         {
             let mut table = txn.open_table(table_def)?;
-            table.remove(&key)?;
+            table.remove(key.as_slice())?;
         }
         txn.commit()?;
         Ok(())

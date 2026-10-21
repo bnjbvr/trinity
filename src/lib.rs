@@ -611,7 +611,7 @@ async fn run_migrations(config: &BotConfig, db: &ShareableDatabase) -> anyhow::R
 /// Run the client for the given `BotConfig`.
 pub async fn run(config: BotConfig) -> anyhow::Result<()> {
     // Create the database, and try to find a device id.
-    let db = Arc::new(unsafe { redb::Database::create(config.redb_path.clone(), 1024 * 1024)? });
+    let db = Arc::new(redb::Database::create(config.redb_path.clone())?);
 
     run_migrations(&config, &db).await?;
 
