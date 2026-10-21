@@ -9,18 +9,20 @@ use matrix_sdk::{
     config::SyncSettings,
     encryption::{BackupDownloadStrategy, EncryptionSettings, recovery::RecoveryState},
     event_handler::Ctx,
-    room::Room,
+    room::{
+        Room,
+        reply::{EnforceThread, Reply},
+    },
     ruma::{
         OwnedUserId, RoomId, UserId,
         events::{
-            AnyMessageLikeEventContent,
             reaction::ReactionEventContent,
             relation::{Annotation, Thread},
             room::{
                 member::StrippedRoomMemberEvent,
                 message::{
-                    MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
-                    TextMessageEventContent,
+                    AddMentions, MessageType, OriginalSyncRoomMessageEvent, Relation,
+                    ReplyWithinThread, RoomMessageEventContent, TextMessageEventContent,
                 },
                 tombstone::OriginalSyncRoomTombstoneEvent,
             },
@@ -480,10 +482,8 @@ async fn on_message(
         None
     };
 
-    let mut files = Vec::new();
-    let new_events: Vec<AnyMessageLikeEventContent> = new_actions
-        .into_iter()
-        .filter_map(|a| match a {
+    for action in new_actions {
+        match action {
             wasm::Action::Respond(msg) => {
                 let mut new_event = if let Some(html) = msg.html {
                     RoomMessageEventContent::text_html(msg.text, html)
@@ -496,32 +496,38 @@ async fn on_message(
                     new_event.relates_to = Some(Relation::Thread(thread_info.clone()));
                 }
 
-                Some(new_event.into())
+                room.send(new_event).await?;
             }
 
-            wasm::Action::React(reaction) => Some(
-                ReactionEventContent::new(Annotation::new(ev.event_id.clone(), reaction)).into(),
-            ),
+            wasm::Action::React(reaction) => {
+                room.send(ReactionEventContent::new(Annotation::new(
+                    ev.event_id.clone(),
+                    reaction,
+                )))
+                .await?;
+            }
 
             wasm::Action::Upload(file) => {
-                files.push(file);
-                None
+                // TODO: allow specifying some mime type?
+                let content_type = mime::STAR_STAR;
+
+                let mut config = AttachmentConfig::new();
+                if let Some(caption) = file.legend {
+                    config = config.caption(Some(TextMessageEventContent::plain(caption)));
+                }
+
+                if let Some(thread_info) = &thread_info {
+                    config = config.reply(Some(Reply {
+                        event_id: thread_info.event_id.clone(),
+                        enforce_thread: EnforceThread::Threaded(ReplyWithinThread::Yes),
+                        add_mentions: AddMentions::No,
+                    }))
+                }
+
+                room.send_attachment(file.name, &content_type, file.content, config)
+                    .await?;
             }
-        })
-        .collect::<Vec<_>>();
-
-    for event in new_events {
-        room.send(event).await?;
-    }
-
-    for f in files {
-        let content_type = mime::STAR_STAR;
-        let mut config = AttachmentConfig::new();
-        if let Some(caption) = f.legend {
-            config = config.caption(Some(TextMessageEventContent::plain(caption)));
         }
-        room.send_attachment(f.name, &content_type, f.content, config)
-            .await?;
     }
 
     Ok(())
