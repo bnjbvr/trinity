@@ -1,0 +1,15 @@
+[package]
+name = "migrate-redb-0_9"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "migrate-redb"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+redb = "4.4.0"
+# Used to read databases created with redb 0.9.0.
+redb_0_9 = { package = "redb", version = "0.9.0" }
